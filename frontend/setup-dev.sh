@@ -9,32 +9,27 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
-# Start PostgreSQL and Redis
-echo "Starting PostgreSQL and Redis..."
-docker-compose up -d postgres redis
+# Start PostgreSQL
+echo "Starting PostgreSQL..."
+docker compose up -d postgres
 
-# Wait for services
-echo "Waiting for services to be ready..."
+# Wait for Postgres to be ready
+echo "Waiting for PostgreSQL..."
 sleep 5
 
-# Install dependencies
-echo "Installing dependencies..."
-npm install
-
-# Generate Prisma client
-echo "Generating Prisma client..."
-npm run db:generate
-
-# Push database schema
-echo "Pushing database schema..."
-npm run db:push
+# Restore NuGet packages
+echo "Restoring backend packages..."
+cd ../backend
+dotnet restore MEPBMmanager.Api/MEPBMmanager.Api.csproj
 
 echo ""
 echo "=== Setup Complete ==="
 echo ""
-echo "Start development with:"
-echo "  Terminal 1: cd packages/server && npm run dev"
-echo "  Terminal 2: cd packages/web && npm run dev"
+echo "The backend runs the EF migrations + seed automatically on startup."
 echo ""
-echo "Server: http://localhost:3001"
-echo "Frontend: http://localhost:5173"
+echo "Start development with:"
+echo "  Terminal 1: cd ../backend && dotnet run --project MEPBMmanager.Api"
+echo "  Terminal 2: cd ../frontend/packages/web && npm install && npm run dev"
+echo ""
+echo "Backend API:  http://localhost:5171"
+echo "Frontend:     http://localhost:5173"
