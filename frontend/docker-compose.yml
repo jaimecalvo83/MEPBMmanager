@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mepbm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mepbm
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: MEPBMmanager.Api/Dockerfile
+    container_name: mepbm-backend
+    restart: unless-stopped
+    ports:
+      - "5171:5171"
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=mepbm;Username=postgres;Password=postgres"
+      Jwt__Secret: "change-this-in-production-minimum-32-characters-long"
+      ASPNETCORE_ENVIRONMENT: "Production"
+    depends_on:
+      - postgres
+
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    container_name: mepbm-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

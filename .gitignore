@@ -1,0 +1,38 @@
+# ── .NET ─────────────────────────────────────────────
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/
+*.userprefs
+build/
+**/publish/
+
+# ASP.NET / EF Core
+appsettings.*.json
+!appsettings.json
+
+# ── Node / npm ───────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+.vercel
+*.tsbuildinfo
+
+# ── Env files (nunca commitear secretos) ─────────────
+.env
+.env.*
+!.env.example
+
+# ── Logs y artefactos temporal ───────────────────────
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ── OS ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db

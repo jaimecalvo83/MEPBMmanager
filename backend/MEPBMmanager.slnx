@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="MEPBMmanager.Api/MEPBMmanager.Api.csproj" />
+  <Project Path="MEPBMmanager.Domain/MEPBMmanager.Domain.csproj" />
+  <Project Path="MEPBMmanager.Infrastructure/MEPBMmanager.Infrastructure.csproj" />
+</Solution>

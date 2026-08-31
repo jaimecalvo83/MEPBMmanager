@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "MEPBM",
+      "Group": "Servers",
+      "Host": "host.docker.internal",
+      "Port": 5432,
+      "MaintenanceDB": "mepbm",
+      "Username": "postgres",
+      "Password": "postgres",
+      "SSLMode": "prefer"
+    }
+  }
+}
