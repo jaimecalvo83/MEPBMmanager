@@ -140,7 +140,8 @@ public static class Map2950Seeder
         string NationSlug, string Name, string Type,
         int Command, int Agent, int Emissary, int Mage,
         int Stealth, int Challenge, bool IsChampion, int Q, int R,
-        int[] SpellIds, string? CommandsAt, int[] ArtifactIds);
+        int[] SpellIds, string? CommandsAt, int[] ArtifactIds,
+        Dictionary<int, int> SpellRanks);
 
     public sealed record NationStatsSeed(
         string Slug, int Gold, int Food, int Timber, int Leather,
@@ -269,10 +270,15 @@ public static class Map2950Seeder
                 int[] artifacts = [];
                 if (c.TryGetProperty("artifacts", out var ar) && ar.ValueKind == JsonValueKind.Array)
                     artifacts = ar.EnumerateArray().Where(e => e.TryGetInt32(out _)).Select(e => e.GetInt32()).ToArray();
+                var spellRanks = new Dictionary<int, int>();
+                if (c.TryGetProperty("spellRanks", out var sr) && sr.ValueKind == JsonValueKind.Object)
+                    foreach (var prop in sr.EnumerateObject())
+                        if (int.TryParse(prop.Name, out var sid) && prop.Value.TryGetInt32(out var rank))
+                            spellRanks[sid] = rank;
                 data.Characters.Add(new CharacterSeed(
                     S("nation"), S("name"), S("type"),
                     N("command"), N("agent"), N("emissary"), N("mage"),
-                    N("stealth"), N("challenge"), false, cq, cr, spells, S("commands") is { } cmd && cmd != "" ? cmd : null, artifacts));
+                    N("stealth"), N("challenge"), false, cq, cr, spells, S("commands") is { } cmd && cmd != "" ? cmd : null, artifacts, spellRanks));
             }
             foreach (var g in data.Characters.GroupBy(c => c.NationSlug))
             {

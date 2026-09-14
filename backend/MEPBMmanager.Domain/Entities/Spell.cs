@@ -7,6 +7,7 @@ public class Spell
     public int SpellId { get; set; }
     public bool IsKnown { get; set; } = true;
     public bool IsLost { get; set; } = false;
+    public int Rank { get; set; } = 0;
     
     public Character Character { get; set; } = null!;
 }

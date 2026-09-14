@@ -1194,7 +1194,7 @@ function CharactersTab({ characters, armies, populationCentres, nationName }: {
               Artifacts: {artifacts.length > 0 ? artifacts.map((a: any) => a.name).join(', ') : '—'}
             </p>
             <p className="text-sm text-gray-300">
-              Spells: {spells.length > 0 ? spells.map((s: any) => `#${s.spellId} ${s.name}`).join(', ') : '—'}
+              Spells: {spells.length > 0 ? spells.map((s: any) => `#${s.spellId} ${s.name} (${s.rank ?? 0})`).join(', ') : '—'}
             </p>
             <p className="text-sm text-gray-400 mt-1">
               {army ? `${char.name} commands an army at ${char.locationHex}.` : `${char.name} is currently at ${char.locationHex}.`}

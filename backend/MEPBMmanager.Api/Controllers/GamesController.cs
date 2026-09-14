@@ -1355,7 +1355,8 @@ public class GamesController : ControllerBase
                 spells = c.Spells.Where(s => s.IsKnown).Select(s => new
                 {
                     s.SpellId,
-                    name = SpellCatalog.Get(s.SpellId)?.Name ?? $"Spell {s.SpellId}"
+                    name = SpellCatalog.Get(s.SpellId)?.Name ?? $"Spell {s.SpellId}",
+                    s.Rank
                 })
             }),
             armies = armies.Select(a => new
@@ -1620,7 +1621,8 @@ public class GamesController : ControllerBase
                     CharacterId = ch.Id,
                     SpellId = sid,
                     IsKnown = true,
-                    IsLost = SpellCatalog.Get(sid)?.IsLost ?? false
+                    IsLost = SpellCatalog.Get(sid)?.IsLost ?? false,
+                    Rank = c.SpellRanks.TryGetValue(sid, out var rank) ? rank : 0
                 });
             // Artefactos iniciales (Game 299 Turn 0): catálogo data.Artifacts + asignación por personaje.
             foreach (var aid in c.ArtifactIds)

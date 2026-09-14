@@ -100,6 +100,7 @@ export interface GameState {
     spells?: Array<{
       spellId: number;
       name: string;
+      rank: number;
     }>;
   }>;
   armies: Array<{
