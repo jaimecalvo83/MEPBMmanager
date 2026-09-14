@@ -252,6 +252,11 @@ function SetupView({
               {allParticipants.length < 1 && 'Need at least 1 participant. '}
               {canStart ? 'Ready to start!' : 'Not ready yet.'}
             </p>
+            {gameState?.game?.gameTypeCode === '2950' && (
+              <p className="text-gray-400 mb-3 text-sm">
+                2950 templates (free + dark + neutral): 10 → 4+4+2 · 15 → 6+6+3 · 20 → 8+8+4 · 25 → 10+10+5.
+              </p>
+            )}
             <button
               onClick={() => startGameMutation.mutate()}
               disabled={!canStart || startGameMutation.isLoading}
@@ -260,7 +265,9 @@ function SetupView({
               {startGameMutation.isLoading ? 'Starting...' : 'Start Game'}
             </button>
             {startGameMutation.isError && (
-              <p className="text-red-400 text-sm mt-2">Failed to start game</p>
+              <p className="text-red-400 text-sm mt-2">
+                {(startGameMutation.error as any)?.response?.data?.error || 'Failed to start game'}
+              </p>
             )}
           </div>
         )}

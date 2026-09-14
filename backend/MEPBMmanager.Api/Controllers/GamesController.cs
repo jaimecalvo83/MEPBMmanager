@@ -804,8 +804,9 @@ public class GamesController : ControllerBase
         var gameTypeCode = (await _db.GameTypes.AsNoTracking().FirstOrDefaultAsync(g => g.Id == game.GameTypeId))?.Code ?? "";
         if (gameTypeCode == "2950")
         {
-            if (confirmedPlayers.Count < 2)
-                return BadRequest(new { error = "Need at least 2 confirmed players to start a 2950 game (balanced sides)" });
+            if (confirmedPlayers.Count != 10 && confirmedPlayers.Count != 15
+                && confirmedPlayers.Count != 20 && confirmedPlayers.Count != 25)
+                return BadRequest(new { error = "2950 needs exactly 10, 15, 20 or 25 confirmed players (templates 4+4+2 / 6+6+3 / 8+8+4 / 10+10+5)" });
             var nationCount = await StartReal2950Game(game);
             return Ok(new { message = "Game started (2950 real module)", nations = nationCount, players = confirmedPlayers.Count });
         }
@@ -1427,29 +1428,27 @@ public class GamesController : ControllerBase
         // ── Create the digitized 2950 hex map ──
         Map2950Seeder.CreateMap(game.Id, game.GameTypeId!, data, _db);
 
-        // ── Selección de naciones: módulo completo (10/10/5) con 25+
-        // confirmados; reducida y equilibrada free/dark (+neutrales) con menos.
+        // ── Plantillas fijas por nº de confirmados (free + dark + neutral) ──
+        // 25: 10+10+5 · 20: 8+8+4 · 15: 6+6+3 · 10: 4+4+2.
+        // Solo esos tamaños (validado en Start): todas las naciones con jugador,
+        // bandos siempre cuadrados. Primeras N de cada bando en orden del módulo.
         // La geografía (1716 hexes) se mantiene; lo que escala es el contenido.
         var rng = new Random();
         var confirmedCount = game.Players.Count(p => p.IsReady);
-        List<Map2950Seeder.NationMeta> selectedMetas;
-        if (confirmedCount >= 25)
+        var (freeWant, darkWant, neutralWant) = confirmedCount switch
         {
-            selectedMetas = data.Nations.ToList();
-        }
-        else
-        {
-            var freeWant = Math.Min(confirmedCount / 2, 10);
-            var darkWant = Math.Min(confirmedCount / 2 + confirmedCount % 2, 10);
-            var picked = freeWant + darkWant;
-            var neutralWant = Math.Min(Math.Max(0, confirmedCount - picked), 5);
-            if (neutralWant == 0)
-                neutralWant = Math.Min(confirmedCount >= 6 ? 2 : 1, 5);
-            selectedMetas = data.Nations.Where(n => n.Allegiance == "free_peoples").Take(freeWant)
-                .Concat(data.Nations.Where(n => n.Allegiance == "dark_servants").Take(darkWant))
-                .Concat(data.Nations.Where(n => n.Allegiance == "neutral").Take(neutralWant))
-                .ToList();
-        }
+            25 => (10, 10, 5),
+            20 => (8, 8, 4),
+            15 => (6, 6, 3),
+            10 => (4, 4, 2),
+            _ => throw new InvalidOperationException(
+                "2950 needs exactly 10, 15, 20 or 25 confirmed players")
+        };
+        List<Map2950Seeder.NationMeta> selectedMetas = data.Nations
+            .Where(n => n.Allegiance == "free_peoples").Take(freeWant)
+            .Concat(data.Nations.Where(n => n.Allegiance == "dark_servants").Take(darkWant))
+            .Concat(data.Nations.Where(n => n.Allegiance == "neutral").Take(neutralWant))
+            .ToList();
 
         // ── Create the selected module nations ──
         // Recursos iniciales: nationStats del JSON (Game 299 Turn 0) si existe, si no valores por defecto.
@@ -1697,12 +1696,9 @@ public class GamesController : ControllerBase
         }
 
         // ── Assign confirmed players to nations ──
-        // Módulo completo: reparto entre las 25. Reducida: solo free/dark
-        // (las neutrales quedan como PNJ); así los bandos siempre cuadran.
+        // Las plantillas suman exactamente los confirmados: reparto 1:1 mezclado.
         var confirmedPlayers = game.Players.Where(p => p.IsReady).ToList();
-        var playable = confirmedCount >= 25
-            ? allNations.OrderBy(_ => rng.Next()).ToList()
-            : allNations.Where(n => n.Allegiance != "neutral").OrderBy(_ => rng.Next()).ToList();
+        var playable = allNations.OrderBy(_ => rng.Next()).ToList();
         for (int i = 0; i < confirmedPlayers.Count; i++)
             confirmedPlayers[i].NationId = playable[i % playable.Count].Id;
 
