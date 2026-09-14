@@ -50,11 +50,11 @@ public static class Map2950Seeder
         ("fire-king", "Fire King", "dark_servants", "#FF6347"),
         ("long-rider", "Long Rider", "dark_servants", "#20B2AA"),
         ("dark-lieutenants", "Dark Lieutenants", "dark_servants", "#2F2F2F"),
-        ("corsairs", "Corsairs", "dark_servants", "#5F9EA0"),
         ("dunlendings", "Dunlendings", "neutral", "#9ACD32"),
         ("khand-easterlings", "Khand Easterlings", "neutral", "#BDB76B"),
         ("rhun-easterlings", "Rhûn Easterlings", "neutral", "#CD853F"),
-        ("white-wizard", "White Wizard", "neutral", "#F5F5F5")
+        ("white-wizard", "White Wizard", "neutral", "#F5F5F5"),
+        ("corsairs", "Corsairs", "neutral", "#5F9EA0")
     };
 
     public sealed record CentreSeed(

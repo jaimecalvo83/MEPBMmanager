@@ -804,8 +804,10 @@ public class GamesController : ControllerBase
         var gameTypeCode = (await _db.GameTypes.AsNoTracking().FirstOrDefaultAsync(g => g.Id == game.GameTypeId))?.Code ?? "";
         if (gameTypeCode == "2950")
         {
-            await StartReal2950Game(game);
-            return Ok(new { message = "Game started (2950 real module)", nations = 25, players = confirmedPlayers.Count });
+            if (confirmedPlayers.Count < 2)
+                return BadRequest(new { error = "Need at least 2 confirmed players to start a 2950 game (balanced sides)" });
+            var nationCount = await StartReal2950Game(game);
+            return Ok(new { message = "Game started (2950 real module)", nations = nationCount, players = confirmedPlayers.Count });
         }
 
         if (confirmedPlayers.Count < 1)
@@ -1418,19 +1420,42 @@ public class GamesController : ControllerBase
         });
     }
 
-    private async Task StartReal2950Game(Game game)
+    private async Task<int> StartReal2950Game(Game game)
     {
         var data = Map2950Seeder.Load(AppContext.BaseDirectory);
 
         // ── Create the digitized 2950 hex map ──
         Map2950Seeder.CreateMap(game.Id, game.GameTypeId!, data, _db);
 
-        // ── Create all 25 module nations ──
-        // Recursos iniciales: nationStats del JSON (Game 299 Turn 0) si existe, si no valores por defecto.
+        // ── Selección de naciones: módulo completo (10/10/5) con 25+
+        // confirmados; reducida y equilibrada free/dark (+neutrales) con menos.
+        // La geografía (1716 hexes) se mantiene; lo que escala es el contenido.
         var rng = new Random();
+        var confirmedCount = game.Players.Count(p => p.IsReady);
+        List<Map2950Seeder.NationMeta> selectedMetas;
+        if (confirmedCount >= 25)
+        {
+            selectedMetas = data.Nations.ToList();
+        }
+        else
+        {
+            var freeWant = Math.Min(confirmedCount / 2, 10);
+            var darkWant = Math.Min(confirmedCount / 2 + confirmedCount % 2, 10);
+            var picked = freeWant + darkWant;
+            var neutralWant = Math.Min(Math.Max(0, confirmedCount - picked), 5);
+            if (neutralWant == 0)
+                neutralWant = Math.Min(confirmedCount >= 6 ? 2 : 1, 5);
+            selectedMetas = data.Nations.Where(n => n.Allegiance == "free_peoples").Take(freeWant)
+                .Concat(data.Nations.Where(n => n.Allegiance == "dark_servants").Take(darkWant))
+                .Concat(data.Nations.Where(n => n.Allegiance == "neutral").Take(neutralWant))
+                .ToList();
+        }
+
+        // ── Create the selected module nations ──
+        // Recursos iniciales: nationStats del JSON (Game 299 Turn 0) si existe, si no valores por defecto.
         var nationsBySlug = new Dictionary<string, Nation>();
         var allNations = new List<Nation>();
-        foreach (var meta in data.Nations)
+        foreach (var meta in selectedMetas)
         {
             data.NationStats.TryGetValue(meta.Slug, out var st);
             var nation = new Nation
@@ -1672,10 +1697,14 @@ public class GamesController : ControllerBase
         }
 
         // ── Assign confirmed players to nations ──
+        // Módulo completo: reparto entre las 25. Reducida: solo free/dark
+        // (las neutrales quedan como PNJ); así los bandos siempre cuadran.
         var confirmedPlayers = game.Players.Where(p => p.IsReady).ToList();
-        var shuffled = allNations.OrderBy(_ => rng.Next()).ToList();
+        var playable = confirmedCount >= 25
+            ? allNations.OrderBy(_ => rng.Next()).ToList()
+            : allNations.Where(n => n.Allegiance != "neutral").OrderBy(_ => rng.Next()).ToList();
         for (int i = 0; i < confirmedPlayers.Count; i++)
-            confirmedPlayers[i].NationId = shuffled[i % shuffled.Count].Id;
+            confirmedPlayers[i].NationId = playable[i % playable.Count].Id;
 
         // ── Initial relations: same allegiance tolerated, rest neutral ──
         SeedInitialRelations(game.Id, allNations);
@@ -1694,6 +1723,7 @@ public class GamesController : ControllerBase
         game.CurrentTurn = 1;
         game.StartedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+        return allNations.Count;
     }
 
     private static int CalculateMapRadius(int totalNations)
