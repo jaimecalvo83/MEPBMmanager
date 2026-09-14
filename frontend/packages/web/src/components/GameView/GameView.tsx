@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
-import { useGameState } from '../../hooks/useGameState';
+import { useGameState, useProcessTurn } from '../../hooks/useGameState';
 import { gamesApi } from '../../api/client';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import HexMap from '../Map/HexMap';
 import OrdersPanel from '../Orders/OrdersPanel';
 import MessagesPanel from '../Messages/MessagesPanel';
+import NationPicker from '../NationPicker/NationPicker';
 
 interface PlayerInfo {
   id: string;
@@ -27,7 +28,7 @@ interface AdminInfo {
   acceptedAt: string | null;
 }
 
-type TabType = 'nation' | 'map' | 'cities' | 'armies' | 'characters' | 'orders' | 'messages' | 'relations';
+type TabType = 'nation' | 'map' | 'cities' | 'armies' | 'characters' | 'orders' | 'messages' | 'relations' | 'reports';
 
 export default function GameView() {
   const { id } = useParams<{ id: string }>();
@@ -118,6 +119,19 @@ export default function GameView() {
     }
   );
 
+  const acceptAdminMutation = useMutation(
+    async () => {
+      await gamesApi.acceptAdmin(id!);
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['game-players', id]);
+        queryClient.invalidateQueries(['game-admins', id]);
+        queryClient.invalidateQueries(['game', id]);
+      }
+    }
+  );
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -153,6 +167,7 @@ export default function GameView() {
       addPlayerMutation={addPlayerMutation}
       removePlayerMutation={removePlayerMutation}
       startGameMutation={startGameMutation}
+      acceptAdminMutation={acceptAdminMutation}
       navigate={navigate}
     />;
   }
@@ -178,11 +193,13 @@ function SetupView({
   gameState, playersData, adminsData, currentUserId, isGameAdmin, shouldSeeAll,
   wantsToPlayWithId, setWantsToPlayWithId, newPlayerEmail, setNewPlayerEmail,
   newPlayerIsAdmin, setNewPlayerIsAdmin,
-  acceptMutation, addPlayerMutation, removePlayerMutation, startGameMutation, navigate
+  acceptMutation, addPlayerMutation, removePlayerMutation, startGameMutation, acceptAdminMutation, navigate
 }: any) {
   const currentPlayer = playersData?.players?.find((p: PlayerInfo) => p.userId === currentUserId);
   const hasAccepted = currentPlayer?.isReady === true;
   const isPlayer = !!currentPlayer;
+  const myAdmin = adminsData?.admins?.find((a: AdminInfo) => a.userId === currentUserId);
+  const needsAdminAccept = !!myAdmin && !myAdmin.isReady;
 
   const adminUserIds = new Set(adminsData?.admins?.map((a: AdminInfo) => a.userId) || []);
   const playerUserIds = new Set(playersData?.players?.map((p: PlayerInfo) => p.userId) || []);
@@ -316,6 +333,25 @@ function SetupView({
           </div>
         )}
 
+        {needsAdminAccept && (
+          <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-purple-600">
+            <h3 className="text-lg font-semibold text-purple-300 mb-2">You are invited as game admin</h3>
+            <p className="text-gray-400 mb-3 text-sm">Accept the admin role so the game can be started. Nations are assigned when the game starts.</p>
+            <button
+              onClick={() => acceptAdminMutation.mutate()}
+              disabled={acceptAdminMutation.isLoading}
+              className="px-6 py-3 bg-purple-600 text-white font-bold rounded hover:bg-purple-500 transition disabled:opacity-50"
+            >
+              {acceptAdminMutation.isLoading ? 'Accepting...' : 'Accept Admin Role'}
+            </button>
+            {acceptAdminMutation.isError && (
+              <p className="text-red-400 text-sm mt-2">
+                {(acceptAdminMutation.error as any)?.response?.data?.error || 'Failed to accept admin role'}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="bg-gray-800 rounded-lg p-4 mb-6">
           <h3 className="text-lg font-semibold text-white mb-2">
             Participants ({confirmedParticipants.length} confirmed / {visibleParticipants.length} total)
@@ -400,6 +436,13 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
   // Only admins see the nation sidebar
   const canSwitchNations = isTestAdmin || nations.length > 1;
 
+  const gameId = gameState?.game?.id as string;
+  const turns = gameState?.turns || [];
+  const canProcess = gameState?.isGameAdmin === true || isTestAdmin;
+  const needsNation = !!gameState?.player && !gameState.player.nationId;
+  const [showNationPicker, setShowNationPicker] = useState(false);
+  const processTurnMutation = useProcessTurn(gameId);
+
   const tabs: { key: TabType; label: string }[] = [
     { key: 'nation', label: 'Nation' },
     { key: 'map', label: 'Map' },
@@ -409,6 +452,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
     { key: 'orders', label: 'Orders' },
     { key: 'messages', label: 'Messages' },
     { key: 'relations', label: 'Relations' },
+    { key: 'reports', label: `Reports (${turns.length})` },
   ];
 
   // Group nations by allegiance for sidebar
@@ -501,14 +545,55 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
               </span>
             )}
           </div>
-          {nation && (
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded" style={{ backgroundColor: nation.color }} />
-              <span className="font-bold text-white">{nation.name}</span>
-              <span className="text-sm text-gray-400">({nation.allegiance})</span>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {canProcess && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => processTurnMutation.mutate()}
+                  disabled={processTurnMutation.isLoading}
+                  className="px-4 py-2 bg-red-600 text-white text-sm font-bold rounded hover:bg-red-500 transition disabled:opacity-50"
+                >
+                  {processTurnMutation.isLoading ? 'Processing...' : 'Process Turn'}
+                </button>
+                {processTurnMutation.isError && (
+                  <span className="text-red-400 text-xs">
+                    {(processTurnMutation.error as any)?.response?.data?.error || 'Failed'}
+                  </span>
+                )}
+                {processTurnMutation.isSuccess && (
+                  <span className="text-green-400 text-xs">Turn processed</span>
+                )}
+              </div>
+            )}
+            {nation && (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded" style={{ backgroundColor: nation.color }} />
+                <span className="font-bold text-white">{nation.name}</span>
+                <span className="text-sm text-gray-400">({nation.allegiance})</span>
+              </div>
+            )}
+          </div>
         </div>
+
+        {needsNation && (
+          <div className="bg-gray-800 border-b border-yellow-600 px-6 py-3 flex items-center gap-4">
+            <span className="text-sm text-yellow-300">You have no nation yet. Claim one of the free nations:</span>
+            <button
+              onClick={() => setShowNationPicker(true)}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-500 transition"
+            >
+              Choose Your Nation
+            </button>
+          </div>
+        )}
+        {showNationPicker && (
+          <NationPicker
+            gameId={gameId}
+            mode="update"
+            onClose={() => setShowNationPicker(false)}
+            onJoined={() => setShowNationPicker(false)}
+          />
+        )}
 
         {/* Nation resources bar */}
         {nation && (
@@ -625,6 +710,13 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
               relations={gameState?.relations || []}
             />
           )}
+
+          {activeTab === 'reports' && (
+            <ReportsTab
+              gameId={gameState?.game?.id}
+              turns={gameState?.turns || []}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -739,6 +831,76 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// REPORTS TAB (turn results)
+// ═══════════════════════════════════════════
+function ReportsTab({ gameId, turns }: { gameId: string; turns: any[] }) {
+  const [selectedTurnId, setSelectedTurnId] = useState<string | null>(turns[0]?.id ?? null);
+  const activeTurnId = turns.some((t: any) => t.id === selectedTurnId) ? selectedTurnId : turns[0]?.id ?? null;
+
+  const { data, isLoading, isError } = useQuery(
+    ['turn-report', gameId, activeTurnId],
+    async () => {
+      const { data } = await gamesApi.getTurnReport(gameId, activeTurnId!);
+      return data as { turn: any; sections: Array<{ title: string; entries: any[] }> };
+    },
+    { enabled: !!gameId && !!activeTurnId, retry: false }
+  );
+
+  if (turns.length === 0) {
+    return <div className="text-gray-400">No turns yet. Reports appear after the first turn is processed.</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 flex-wrap">
+        {turns.map((t: any) => (
+          <button
+            key={t.id}
+            onClick={() => setSelectedTurnId(t.id)}
+            className={`px-4 py-2 rounded text-sm font-semibold transition ${
+              t.id === activeTurnId
+                ? 'bg-mepbm-gold text-gray-900'
+                : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'
+            }`}
+          >
+            Turn {t.number} · {t.season} ({t.status})
+          </button>
+        ))}
+      </div>
+
+      {isLoading && <div className="text-gray-400">Loading report...</div>}
+      {isError && <div className="text-red-400">Failed to load the turn report.</div>}
+      {data && (
+        <div className="space-y-4">
+          {data.sections.length === 0 && (
+            <div className="text-gray-400">No results recorded for this turn yet.</div>
+          )}
+          {data.sections.map((s, i) => (
+            <div key={i} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <h3 className="text-md font-bold text-mepbm-gold mb-2">{s.title}</h3>
+              <div className="space-y-1">
+                {(s.entries || []).map((e: any, j: number) => (
+                  <div key={j} className="text-sm text-gray-300">
+                    {Object.entries(e || {})
+                      .filter(([, v]) => v === null || ['string', 'number', 'boolean'].includes(typeof v))
+                      .map(([k, v]) => (
+                        <span key={k} className="mr-3">
+                          <span className="text-gray-500">{k}: </span>
+                          <span className="text-gray-100">{String(v)}</span>
+                        </span>
+                      ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -52,6 +52,8 @@ export const gamesApi = {
     api.post(`/games/${gameId}/start`),
   processTurn: (gameId: string) =>
     api.post(`/games/${gameId}/process-turn`),
+  getTurnReport: (gameId: string, turnId: string) =>
+    api.get(`/games/${gameId}/turns/${turnId}/report`),
   getState: (gameId: string, nationId?: string) =>
     api.get(`/games/${gameId}/state`, { params: nationId ? { nationId } : undefined }),
   updateNation: (gameId: string, nationId: string) =>

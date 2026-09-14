@@ -32,6 +32,15 @@ export interface GameState {
     isReady: boolean;
     joinedAt: string;
   } | null;
+  isGameAdmin: boolean;
+  turns: Array<{
+    id: string;
+    number: number;
+    status: string;
+    season: string;
+    deadline: string;
+    processedAt: string | null;
+  }>;
   nation: {
     id: string;
     name: string;

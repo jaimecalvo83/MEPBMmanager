@@ -328,8 +328,11 @@ public class GamesController : ControllerBase
         if (game == null)
             return NotFound(new { error = "Game not found" });
 
-        if (game.Status != "setup")
-            return BadRequest(new { error = "Game has already started" });
+        if (game.Status != "setup" && game.Status != "active")
+            return BadRequest(new { error = "Cannot join this game" });
+
+        if (game.Status == "active" && request.NationId != null)
+            return BadRequest(new { error = "Pick your nation after joining" });
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
@@ -353,7 +356,7 @@ public class GamesController : ControllerBase
             Id = Guid.NewGuid().ToString(),
             UserId = userId,
             GameId = id,
-            NationId = request.NationId
+            NationId = game.Status == "setup" ? request.NationId : null
         };
 
         _db.Players.Add(player);
@@ -371,12 +374,13 @@ public class GamesController : ControllerBase
         if (game == null)
             return NotFound(new { error = "Game not found" });
 
-        if (game.Status != "setup")
-            return BadRequest(new { error = "Can only assign nation during setup" });
-
         var player = await _db.Players.FirstOrDefaultAsync(p => p.UserId == userId && p.GameId == id);
         if (player == null)
             return NotFound(new { error = "You are not a player in this game" });
+
+        // Setup: asignar libremente. Activa: solo reclamar si aún no tienes nación.
+        if (game.Status != "setup" && !(game.Status == "active" && player.NationId == null))
+            return BadRequest(new { error = "Can only claim a nation during setup, or an unassigned nation in an active game" });
 
         if (player.NationId != null)
             return BadRequest(new { error = "You already have a nation assigned" });
@@ -1197,6 +1201,13 @@ public class GamesController : ControllerBase
             .OrderByDescending(t => t.Number)
             .FirstOrDefaultAsync();
 
+        var recentTurns = await _db.Turns
+            .Where(t => t.GameId == id)
+            .OrderByDescending(t => t.Number)
+            .Take(5)
+            .Select(t => new { t.Id, t.Number, t.Status, t.Season, t.Deadline, t.ProcessedAt })
+            .ToListAsync();
+
         // ── Determine switchable nations and active nation ──
         string? activeNationId = null;
         List<string> switchableNationIds; // nations the user can switch between
@@ -1314,6 +1325,8 @@ public class GamesController : ControllerBase
             nations = visibleNations,
             allNations,
             currentTurn = currentTurn == null ? null : new { currentTurn.Id, currentTurn.Number, currentTurn.Status, currentTurn.Season, currentTurn.Deadline },
+            turns = recentTurns,
+            isGameAdmin,
             characters = characters.Select(c => new
             {
                 c.Id,
@@ -1673,7 +1686,7 @@ public class GamesController : ControllerBase
             Id = Guid.NewGuid().ToString(),
             GameId = game.Id,
             Number = 1,
-            Status = "active",
+            Status = "orders_open",
             Season = "summer",
             Deadline = DateTime.UtcNow.AddDays(7)
         });
