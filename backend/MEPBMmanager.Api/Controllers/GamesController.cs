@@ -804,9 +804,9 @@ public class GamesController : ControllerBase
         var gameTypeCode = (await _db.GameTypes.AsNoTracking().FirstOrDefaultAsync(g => g.Id == game.GameTypeId))?.Code ?? "";
         if (gameTypeCode == "2950")
         {
-            if (confirmedPlayers.Count != 10 && confirmedPlayers.Count != 15
-                && confirmedPlayers.Count != 20 && confirmedPlayers.Count != 25)
-                return BadRequest(new { error = "2950 needs exactly 10, 15, 20 or 25 confirmed players (templates 4+4+2 / 6+6+3 / 8+8+4 / 10+10+5)" });
+            var c = confirmedPlayers.Count;
+            if (!((c >= 6 && c <= 10) || (c >= 11 && c <= 15) || (c >= 16 && c <= 20) || (c >= 21 && c <= 25)))
+                return BadRequest(new { error = "2950 needs 6-10, 11-15, 16-20 or 21-25 confirmed players (templates 4+4+2 / 6+6+3 / 8+8+4 / 10+10+5, surplus nations as NPCs)" });
             var nationCount = await StartReal2950Game(game);
             return Ok(new { message = "Game started (2950 real module)", nations = nationCount, players = confirmedPlayers.Count });
         }
@@ -1425,37 +1425,33 @@ public class GamesController : ControllerBase
     {
         var data = Map2950Seeder.Load(AppContext.BaseDirectory);
 
-        // ── Create the digitized 2950 hex map ──
-        Map2950Seeder.CreateMap(game.Id, game.GameTypeId!, data, _db);
-
-        // ── Plantillas fijas por nº de confirmados (free + dark + neutral) ──
-        // 25: 10+10+5 · 20: 8+8+4 · 15: 6+6+3 · 10: 4+4+2.
-        // Solo esos tamaños (validado en Start): todas las naciones con jugador,
-        // bandos siempre cuadrados. Primeras N de cada bando en orden del módulo.
-        // La geografía (1716 hexes) se mantiene; lo que escala es el contenido.
+        // ── Plantilla por baremo + PNJs (naciones sobrantes, máx 4) ──
         var rng = new Random();
         var confirmedCount = game.Players.Count(p => p.IsReady);
-        var (freeWant, darkWant, neutralWant) = confirmedCount switch
-        {
-            25 => (10, 10, 5),
-            20 => (8, 8, 4),
-            15 => (6, 6, 3),
-            10 => (4, 4, 2),
-            _ => throw new InvalidOperationException(
-                "2950 needs exactly 10, 15, 20 or 25 confirmed players")
-        };
-        List<Map2950Seeder.NationMeta> selectedMetas = data.Nations
-            .Where(n => n.Allegiance == "free_peoples").Take(freeWant)
-            .Concat(data.Nations.Where(n => n.Allegiance == "dark_servants").Take(darkWant))
-            .Concat(data.Nations.Where(n => n.Allegiance == "neutral").Take(neutralWant))
-            .ToList();
+        var templateSize = Map2950Seeder.TemplateSizeFor(confirmedCount);
+        var template = Map2950Seeder.Templates[templateSize];
+        var (playedSlugs, _) = Map2950Seeder.SplitNpcs(template, confirmedCount);
+        var selectedSlugs = new HashSet<string>(
+            template.Free.Concat(template.Dark).Concat(template.Neutral));
 
-        // ── Create the selected module nations ──
+        // ── Create the cropped 2950 hex map (recorte de plantilla ∪ contenido) ──
+        var q1 = template.Q1; var q2 = template.Q2; var r1 = template.R1; var r2 = template.R2;
+        foreach (var c in data.Centres.Where(c => selectedSlugs.Contains(c.NationSlug)))
+        { q1 = Math.Min(q1, c.Q); q2 = Math.Max(q2, c.Q); r1 = Math.Min(r1, c.R); r2 = Math.Max(r2, c.R); }
+        foreach (var a in data.Armies.Where(a => selectedSlugs.Contains(a.NationSlug)))
+        { q1 = Math.Min(q1, a.Q); q2 = Math.Max(q2, a.Q); r1 = Math.Min(r1, a.R); r2 = Math.Max(r2, a.R); }
+        foreach (var c in data.Characters.Where(c => selectedSlugs.Contains(c.NationSlug)))
+        { q1 = Math.Min(q1, c.Q); q2 = Math.Max(q2, c.Q); r1 = Math.Min(r1, c.R); r2 = Math.Max(r2, c.R); }
+        Map2950Seeder.CreateMap(game.Id, game.GameTypeId!, data, _db, (q1, q2, r1, r2));
+
+        // ── Create the selected module nations (jugadas + PNJ) ──
         // Recursos iniciales: nationStats del JSON (Game 299 Turn 0) si existe, si no valores por defecto.
         var nationsBySlug = new Dictionary<string, Nation>();
         var allNations = new List<Nation>();
-        foreach (var meta in selectedMetas)
+        var metasBySlug = data.Nations.ToDictionary(n => n.Slug);
+        foreach (var slug in template.Free.Concat(template.Dark).Concat(template.Neutral))
         {
+            var meta = metasBySlug[slug];
             data.NationStats.TryGetValue(meta.Slug, out var st);
             var nation = new Nation
             {
@@ -1695,10 +1691,10 @@ public class GamesController : ControllerBase
             }
         }
 
-        // ── Assign confirmed players to nations ──
-        // Las plantillas suman exactamente los confirmados: reparto 1:1 mezclado.
+        // ── Assign confirmed players to played nations (1:1 mezclado) ──
+        // Las PNJ quedan sin jugador y pueden incorporarse luego (nación libre).
         var confirmedPlayers = game.Players.Where(p => p.IsReady).ToList();
-        var playable = allNations.OrderBy(_ => rng.Next()).ToList();
+        var playable = playedSlugs.Select(s => nationsBySlug[s]).OrderBy(_ => rng.Next()).ToList();
         for (int i = 0; i < confirmedPlayers.Count; i++)
             confirmedPlayers[i].NationId = playable[i % playable.Count].Id;
 

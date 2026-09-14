@@ -57,6 +57,70 @@ public static class Map2950Seeder
         ("corsairs", "Corsairs", "neutral", "#5F9EA0")
     };
 
+    // ── Plantillas por baremo de jugadores (conjuntos anidados: cada baremo ──
+    // añade naciones al anterior). Recorte por laterales con Mordor+Gondor
+    // siempre dentro. Solo el mapa de 25 es completo.
+    public sealed record TemplateDef(
+        string[] Free, string[] Dark, string[] Neutral,
+        int Q1, int Q2, int R1, int R2);
+
+    public static readonly Dictionary<int, TemplateDef> Templates = new()
+    {
+        [10] = new(
+            ["riders-of-rohan", "northern-gondor", "southern-gondor", "sinda-elves"],
+            ["dark-lieutenants", "dog-lord", "fire-king", "cloud-lord"],
+            ["white-wizard", "dunlendings"],
+            13, 37, 12, 31),
+        [15] = new(
+            ["riders-of-rohan", "northern-gondor", "southern-gondor", "sinda-elves", "woodmen", "northmen"],
+            ["dark-lieutenants", "dog-lord", "fire-king", "cloud-lord", "ice-king", "dragon-lord"],
+            ["white-wizard", "dunlendings", "rhun-easterlings"],
+            13, 44, 4, 31),
+        [20] = new(
+            ["riders-of-rohan", "northern-gondor", "southern-gondor", "sinda-elves", "woodmen", "northmen", "dunadan-rangers", "silvan-elves"],
+            ["dark-lieutenants", "dog-lord", "fire-king", "cloud-lord", "ice-king", "dragon-lord", "blind-sorcerer", "long-rider"],
+            ["white-wizard", "dunlendings", "rhun-easterlings", "khand-easterlings"],
+            7, 44, 4, 38),
+        [25] = new(
+            ["riders-of-rohan", "northern-gondor", "southern-gondor", "sinda-elves", "woodmen", "northmen", "dunadan-rangers", "silvan-elves", "dwarves", "noldo-elves"],
+            ["dark-lieutenants", "dog-lord", "fire-king", "cloud-lord", "ice-king", "dragon-lord", "blind-sorcerer", "long-rider", "witch-king", "quiet-avenger"],
+            ["white-wizard", "dunlendings", "rhun-easterlings", "khand-easterlings", "corsairs"],
+            1, 44, 1, 39),
+    };
+
+    // Baremo por confirmados: 21-25→25, 16-20→20, 11-15→15, 6-10→10.
+    public static int TemplateSizeFor(int confirmedCount) => confirmedCount switch
+    {
+        >= 21 and <= 25 => 25,
+        >= 16 and <= 20 => 20,
+        >= 11 and <= 15 => 15,
+        >= 6 and <= 10 => 10,
+        _ => throw new InvalidOperationException(
+            "2950 needs 6-10, 11-15, 16-20 or 21-25 confirmed players")
+    };
+
+    // Naciones sobrantes (0-4) como PNJ, priorizando neutrales:
+    // 1→1N, 2→2N, 3→1F+1D+1N, 4→1F+1D+2N (siempre del final de cada lista).
+    // Devuelve (jugadas, pnj). Los PNJ pueden incorporarse luego (nación libre).
+    public static (string[] Played, string[] Npcs) SplitNpcs(TemplateDef t, int confirmedCount)
+    {
+        int templateSize = t.Free.Length + t.Dark.Length + t.Neutral.Length;
+        int surplus = templateSize - confirmedCount;
+        var npcs = new List<string>();
+        if (surplus == 1) npcs.Add(t.Neutral[^1]);
+        else if (surplus == 2) npcs.AddRange(t.Neutral.TakeLast(2));
+        else if (surplus >= 3)
+        {
+            npcs.Add(t.Free[^1]);
+            npcs.Add(t.Dark[^1]);
+            npcs.Add(t.Neutral[^1]);
+            if (surplus >= 4) npcs.Add(t.Neutral[^2]);
+        }
+        var npcSet = new HashSet<string>(npcs);
+        var played = t.Free.Concat(t.Dark).Concat(t.Neutral).Where(s => !npcSet.Contains(s)).ToArray();
+        return (played, npcs.ToArray());
+    }
+
     public sealed record CentreSeed(
         string NationSlug, int Q, int R, string Name, string Size, string Fortification,
         bool HasHarbour, bool HasPort, bool IsCapital, bool IsHidden);
@@ -259,11 +323,14 @@ public static class Map2950Seeder
         return data;
     }
 
-    /// <summary>Inserts all 1716 real hex tiles for a 2950 game.</summary>
-    public static void CreateMap(string gameId, string gameTypeId, Map2950Data data, MepbmDbContext db)
+    /// <summary>Inserts real hex tiles for a 2950 game, cropped to the template box.</summary>
+    public static void CreateMap(string gameId, string gameTypeId, Map2950Data data, MepbmDbContext db,
+        (int Q1, int Q2, int R1, int R2)? crop = null)
     {
         foreach (var (q, r, terrain, hasBridge, hasFord, hasMajor, hasMinor, hasRoad) in data.Hexes)
         {
+            if (crop.HasValue && (q < crop.Value.Q1 || q > crop.Value.Q2 || r < crop.Value.R1 || r > crop.Value.R2))
+                continue;
             db.HexTiles.Add(new HexTile
             {
                 Id = Guid.NewGuid().ToString(),

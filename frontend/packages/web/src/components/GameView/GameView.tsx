@@ -254,7 +254,8 @@ function SetupView({
             </p>
             {gameState?.game?.gameTypeCode === '2950' && (
               <p className="text-gray-400 mb-3 text-sm">
-                2950 templates (free + dark + neutral): 10 → 4+4+2 · 15 → 6+6+3 · 20 → 8+8+4 · 25 → 10+10+5.
+                2950 brackets (free + dark + neutral): 6-10 → 4+4+2 · 11-15 → 6+6+3 · 16-20 → 8+8+4 · 21-25 → 10+10+5.
+                Surplus nations play as NPCs (max 4, neutrals first) on a cropped map and can join later.
               </p>
             )}
             <button

@@ -257,7 +257,17 @@ export default function HexMap({ hexes, armies = [], characters = [], population
     // Uses the digitized hex-side lists (map2950_features): rivers run ALONG
     // the shared hex edge; roads join the midpoints of a hex's road sides;
     // fords/bridges are ticks on the side midpoint. Only for the 2950 module.
-    if (hexes.length === 1716) {
+    // On cropped maps (brackets 10/15/20) only sides with both hexes present.
+    if (hexes.length > 0) {
+      const present = new Set(
+        hexes.map((h: any) => `${String(h.q).padStart(2, '0')}${String(h.r).padStart(2, '0')}`)
+      );
+      const live = (sides: string[][]) => sides.filter(([a, b]) => present.has(a) && present.has(b));
+      const majorSides = live(MAP2950_MAJOR_RIVER_SIDES as unknown as string[][]);
+      const minorSides = live(MAP2950_MINOR_RIVER_SIDES as unknown as string[][]);
+      const roadSides = live(MAP2950_ROAD_SIDES as unknown as string[][]);
+      const fordSides = live(MAP2950_FORD_SIDES as unknown as string[][]);
+      const bridgeSides = live(MAP2950_BRIDGE_SIDES as unknown as string[][]);
       const EDGE_HALF = HEX_SIZE / 2; // regular hex: side length = circumradius
       const idToQR = (id: string) => ({ q: parseInt(id.slice(0, 2), 10), r: parseInt(id.slice(2, 4), 10) });
       const segLine = (x1: number, y1: number, x2: number, y2: number, opts: L.PolylineOptions) => {
@@ -275,12 +285,12 @@ export default function HexMap({ hexes, armies = [], characters = [], population
         const L = Math.hypot(dx, dy) || 1;
         return { mx, my, ex: -dy / L, ey: dx / L };
       };
-      for (const [a, b] of MAP2950_MAJOR_RIVER_SIDES) {
+      for (const [a, b] of majorSides) {
         const { mx, my, ex, ey } = edgeOf(a, b);
         segLine(mx - ex * EDGE_HALF, my - ey * EDGE_HALF, mx + ex * EDGE_HALF, my + ey * EDGE_HALF,
           { color: '#1E5CFF', weight: 4, opacity: 0.95 });
       }
-      for (const [a, b] of MAP2950_MINOR_RIVER_SIDES) {
+      for (const [a, b] of minorSides) {
         const { mx, my, ex, ey } = edgeOf(a, b);
         segLine(mx - ex * EDGE_HALF, my - ey * EDGE_HALF, mx + ex * EDGE_HALF, my + ey * EDGE_HALF,
           { color: '#4DA6FF', weight: 2, opacity: 0.95 });
@@ -288,7 +298,7 @@ export default function HexMap({ hexes, armies = [], characters = [], population
       // Roads: join side midpoints inside each hex (JPG draws them through
       // the hex interior, crossing sides at their midpoints).
       const roadMids = new Map<string, { x: number; y: number }[]>();
-      for (const [a, b] of MAP2950_ROAD_SIDES) {
+      for (const [a, b] of roadSides) {
         const { mx, my } = edgeOf(a, b);
         if (!roadMids.has(a)) roadMids.set(a, []);
         if (!roadMids.has(b)) roadMids.set(b, []);
@@ -311,8 +321,8 @@ export default function HexMap({ hexes, armies = [], characters = [], population
         segLine(mx - ex * H, my - ey * H, mx + ex * H, my + ey * H, { color: '#FFF', weight: 7, opacity: 0.9 });
         segLine(mx - ex * H, my - ey * H, mx + ex * H, my + ey * H, { color, weight: 4, opacity: 1 });
       };
-      for (const [a, b] of MAP2950_FORD_SIDES) tick(a, b, '#3A3A3A');
-      for (const [a, b] of MAP2950_BRIDGE_SIDES) tick(a, b, '#000');
+      for (const [a, b] of fordSides) tick(a, b, '#3A3A3A');
+      for (const [a, b] of bridgeSides) tick(a, b, '#000');
     }
 
     // ── Draw entity markers ──
