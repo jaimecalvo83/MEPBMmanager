@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MEPBMmanager.Domain.Constants;
 using MEPBMmanager.Domain.Entities;
 using MEPBMmanager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -83,8 +84,9 @@ public class TurnProcessor
         _pendingArmySpells = new();
         _pendingNavySpells = new();
         _recruitsUsed.Clear();
+        _fortifiedThisTurn.Clear();
         _nationSellValue.Clear();
-        foreach (var pr in MarketProducts) _marketBuyLeft[pr] = MarketBuyPool;
+        foreach (var pr in MarketProducts) _marketBuyLeft[pr] = MarketBuyPool[pr];
         foreach (var o in currentTurn.Orders.Where(o => o.Code == 225 && o.Status == "pending"))
         {
             var sp = SpellFromParameters(o.Parameters);
@@ -157,13 +159,60 @@ public class TurnProcessor
 
         foreach (var nation in game.Nations.Where(n => !n.IsEliminated))
         {
-            // Ingreso por Population Centres
-            var pcIncome = nation.PopulationCentres.Sum(pc => GetPCIncome(pc.Size));
+            // Ingreso por PC no asediada: impuesto oficial (tamaño×tasa; camp 0)
+            // + oro minado (Production).
+            var earners = nation.PopulationCentres.Where(pc => !pc.IsSieged).ToList();
+            var pcIncome = earners.Sum(pc => GetPCTax(pc.Size, nation.TaxRate) + Math.Max(0, pc.Production));
             nation.Gold += pcIncome;
 
-            // Impuestos sobre el oro total (si hay excedente)
-            var taxRevenue = (int)(nation.Gold * nation.TaxRate / 100.0 * 0.1);
-            nation.Gold += taxRevenue;
+            // Mantenimiento oficial (oro): tropas, puertos, barcos, fuertes, pjs.
+            var upkeep = NationUpkeep(nation);
+            nation.Gold -= upkeep;
+
+            // Sin fondos: subida forzosa de impuestos para cubrir el déficit;
+            // por encima de 100 la nación queda eliminada.
+            string? forcedNote = null;
+            if (nation.Gold < 0)
+            {
+                int rateBase = earners.Sum(pc => pc.Size.ToLower() switch
+                {
+                    "city" => 100,
+                    "major town" => 75,
+                    "town" => 50,
+                    "village" => 25,
+                    _ => 0
+                });
+                if (rateBase <= 0)
+                {
+                    nation.IsEliminated = true;
+                    forcedNote = "eliminated (no tax base)";
+                }
+                else
+                {
+                    int bump = (int)Math.Ceiling(-nation.Gold / (double)rateBase);
+                    int newRate = nation.TaxRate + bump;
+                    if (newRate > 100)
+                    {
+                        nation.IsEliminated = true;
+                        forcedNote = $"eliminated (tax rate forced to {newRate}%)";
+                    }
+                    else
+                    {
+                        nation.TaxRate = newRate;
+                        nation.Gold += rateBase * bump;
+                        foreach (var pc in nation.PopulationCentres)
+                            pc.Loyalty = Math.Max(1, pc.Loyalty - Math.Max(1, bump / 10));
+                        forcedNote = $"forced tax hike to {newRate}%";
+                    }
+                }
+            }
+
+            // Deriva de lealtad por tasa (simplificación documentada): >=50 -2,
+            // 30-40 -1, <=20 +1 (tope 100).
+            int drift = nation.TaxRate >= 50 ? -2 : nation.TaxRate >= 30 ? -1 : nation.TaxRate <= 20 ? 1 : 0;
+            if (drift != 0 && !nation.IsEliminated)
+                foreach (var pc in nation.PopulationCentres)
+                    pc.Loyalty = Math.Clamp(pc.Loyalty + drift, 1, 100);
 
             // Consumo de ejÃ©rcitos
             foreach (var army in nation.Armies)
@@ -199,20 +248,64 @@ public class TurnProcessor
                 gold = nation.Gold,
                 food = nation.Food,
                 tax = nation.TaxRate,
-                message = $"Economy processed: +{pcIncome} income, +{taxRevenue} taxes"
+                message = $"Economy processed: +{pcIncome} income, -{upkeep} upkeep" + (forcedNote != null ? $" ({forcedNote})" : "")
             });
         }
 
         return results;
     }
 
-    private int GetPCIncome(string size) => size switch
+    /// <summary>Impuesto oficial por PC: tamaño×tasa (camp 0).</summary>
+    public static int GetPCTax(string size, int taxRate) => size.ToLower() switch
     {
-        "city" => 500,
-        "town" => 200,
-        "village" => 80,
-        _ => 50
+        "city" => 100 * taxRate,
+        "major town" => 75 * taxRate,
+        "town" => 50 * taxRate,
+        "village" => 25 * taxRate,
+        _ => 0
     };
+
+    /// <summary>Nivel de fuerte 1-5 por nombre (tipos oficiales).</summary>
+    public static int FortLevel(string? fort)
+    {
+        var f = (fort ?? "").ToLower();
+        if (f.Contains("citadel")) return 5;
+        if (f == "castle" || f == "stone walls") return 3;
+        if (f == "keep" || f == "walls" || f == "fortress") return 4;
+        if (f.Contains("fort")) return 2;
+        if (f.Contains("tower") || f.Contains("palisade")) return 1;
+        return 0;
+    }
+
+    /// <summary>Índice 0-4 en la escalera Tower-Fort-Castle-Keep-Citadel (-1 sin nada).</summary>
+    public static int FortLadderIndex(string? fort) => (fort ?? "").ToLower() switch
+    {
+        "tower" or "palisade" => 0,
+        "fort" => 1,
+        "stone walls" or "castle" => 2,
+        "walls" or "keep" or "fortress" => 3,
+        "citadel walls" or "citadel" => 4,
+        _ => -1
+    };
+
+    /// <summary>Mantenimiento oficial en oro: tropas, puertos, barcos, fuertes y pjs.</summary>
+    public static int NationUpkeep(Nation nation)
+    {
+        int upkeep = 0;
+        foreach (var a in nation.Armies)
+            upkeep += a.HeavyCavalry * 6 + a.LightCavalry * 3 + a.HeavyInfantry * 4
+                + a.LightInfantry * 2 + a.Archers * 2 + a.MenAtArms;
+        foreach (var pc in nation.PopulationCentres)
+        {
+            if (pc.HasHarbour) upkeep += 250;
+            if (pc.HasPort) upkeep += 500;
+            upkeep += FortLevel(pc.Fortification) * 500;
+        }
+        foreach (var n in nation.Navies) upkeep += (n.Warships + n.Transports) * 50;
+        foreach (var c in nation.Characters)
+            upkeep += (c.CommandSkill + c.AgentSkill + c.EmissarySkill + c.MageSkill) * 20;
+        return upkeep;
+    }
 
     private int GetArmyFoodCost(Army army)
     {
@@ -371,8 +464,8 @@ public class TurnProcessor
             600 => ProcessSkillOrder(order, "Agent", parameters),
             910 => ProcessSkillOrder(order, "Agent", parameters),
             915 => ProcessSkillOrder(order, "Agent", parameters),
-            520 => ProcessSkillOrder(order, "Emissary", parameters),
-            525 => ProcessSkillOrder(order, "Emissary", parameters),
+            520 => ProcessInfluenceOwn(order, parameters),
+            525 => ProcessInfluenceOther(order, parameters, game),
 
             // â”€â”€ Ã“RDENES RECONCILIADAS CON EL REGLAMENTO â”€â”€
             175 => ProcessChangeAllegiance(order, parameters),
@@ -478,17 +571,18 @@ public class TurnProcessor
     }
 
     private Dictionary<string, int> _recruitsUsed = new();
+    private readonly HashSet<string> _fortifiedThisTurn = new();
 
     private PopulationCentre? OwnedPCAt(string hex, string nationId)
         => _db.PopulationCentres.FirstOrDefault(p => p.LocationHex == hex && p.NationId == nationId);
 
-    private int RecruitCapacity(string size) => size.ToLower() switch
+    public static int RecruitCapacity(string size) => size.ToLower() switch
     {
         "camp" => 100,
         "village" => 200,
         "town" => 300,
         "major town" => 400,
-        "city" => 600,
+        "city" => 500,
         "fortress" => 500,
         "citadel" => 800,
         _ => 100
@@ -538,7 +632,9 @@ public class TurnProcessor
 
         var existing = CountTroops(order.Army);
         var baseTraining = Math.Max(order.Army.Training, 10);
-        var recruitTraining = Math.Clamp(order.Character?.CommandSkill ?? 10, 10, 100);
+        // La base nacional (RECRUIT_TRAINING_*) es suelo: manda el mando del general si es mayor.
+        var nationBase = NationAbilities.RecruitTrainingFor(order.Nation?.Name, troopType);
+        var recruitTraining = Math.Max(nationBase, Math.Clamp(order.Character?.CommandSkill ?? 10, 10, 100));
         switch (troopType)
         {
             case "HeavyCavalry": order.Army.HeavyCavalry += amount; break;
@@ -713,8 +809,8 @@ public class TurnProcessor
             LightInfantry = infantry,
             Morale = Math.Min(100, navy.Strength),
             Training = 10,
-            WeaponRank = 10,
-            ArmourRank = 0
+            LIWeaponRank = 10,
+            LIArmourRank = 0
         };
     }
 
@@ -966,13 +1062,17 @@ public class TurnProcessor
 
         var dest = destEl.GetString()!;
         var hexes = _db.HexTiles.Where(h => h.GameId == game.Id).ToList();
-        // Force march: ignore la parada forzosa ante enemigos, pero -15 moral.
+        // Marcha forzada: ignora la parada forzosa ante enemigos.
+        // Moral según habilidad nacional: NONE = 0; resto 1-2 con comida, 2-5 sin ella.
         var res = _movement.MoveArmy(order.Army, order.Character, dest, game, hexes, evasive: false, forceMarch: true);
-        if (order.Army != null) order.Army.Morale = Math.Max(0, order.Army.Morale - 15);
+        int loss = 0;
+        if (!NationAbilities.HasForNation(order.Nation?.Name, "FORCE_MARCH_NONE"))
+            loss = order.Army.Food > 0 ? _rng.Next(1, 3) : _rng.Next(2, 6);
+        if (order.Army != null && loss > 0) order.Army.Morale = Math.Max(0, order.Army.Morale - loss);
         PersistEncounters(res.Encounters);
         order.Status = "resolved";
-        order.Result = res.Message + " (force march, morale -15)";
-        return MakeResult(order, $"Army: {res.Message} (force march, morale -15)");
+        order.Result = res.Message + $" (force march, morale -{loss})";
+        return MakeResult(order, $"Army: {res.Message} (force march, morale -{loss})");
     }
 
     private object ProcessMoveCharacterJoinArmy(Order order, Dictionary<string, JsonElement> parameters)
@@ -994,16 +1094,26 @@ public class TurnProcessor
     private static readonly string[] MarketProducts = { "timber", "leather", "bronze", "steel", "mithril", "mounts", "food" };
     private static readonly Dictionary<string, (int Buy, int Sell)> MarketPrice = new()
     {
-        ["timber"] = (12, 10),
-        ["leather"] = (15, 12),
-        ["bronze"] = (18, 14),
-        ["steel"] = (30, 24),
-        ["mithril"] = (150, 110),
-        ["mounts"] = (40, 30),
-        ["food"] = (4, 3)
+        // Precios del Game 299 turno 0 (varían por partida en el reglamento).
+        ["timber"] = (12, 8),
+        ["leather"] = (8, 5),
+        ["bronze"] = (12, 8),
+        ["steel"] = (14, 9),
+        ["mithril"] = (95, 63),
+        ["mounts"] = (22, 15),
+        ["food"] = (3, 2)
     };
-    private const int MarketSellCap = 20000;   // oro de venta mÃ¡x por naciÃ³n y turno
-    private const int MarketBuyPool = 3000;    // unidades disponibles por producto y turno
+    private const int MarketSellCap = 20000;   // oro de venta máx por nación y turno
+    private static readonly Dictionary<string, int> MarketBuyPool = new()   // uds. por producto y turno
+    {
+        ["timber"] = 5000,
+        ["leather"] = 6000,
+        ["bronze"] = 4000,
+        ["steel"] = 3000,
+        ["mithril"] = 500,
+        ["food"] = 24293,
+        ["mounts"] = 2000
+    };
     private Dictionary<string, int> _nationSellValue = new();
     private Dictionary<string, int> _marketBuyLeft = new();
 
@@ -1066,7 +1176,8 @@ public class TurnProcessor
         var requested = amtEl.GetInt32();
         if (requested <= 0) return MakeResult(order, "Amount must be positive", false);
 
-        var (buyPrice, _) = MarketPrice[product];
+        var (baseBuy, _) = MarketPrice[product];
+        var buyPrice = NationAbilities.MarketBuyPrice(order.Nation?.Name, baseBuy);
         var available = _marketBuyLeft.GetValueOrDefault(product);
         var amount = Math.Min(requested, available);
         if (order.Nation.Gold < amount * buyPrice) amount = order.Nation.Gold / buyPrice;
@@ -1099,7 +1210,8 @@ public class TurnProcessor
                 return MakeResult(order, "Must be at your own non-sieged population centre to sell", false);
         }
 
-        var (_, sellPrice) = MarketPrice[product];
+        var (_, baseSell) = MarketPrice[product];
+        var sellPrice = NationAbilities.MarketSellPrice(order.Nation?.Name, baseSell);
         var stock = GetStock(order.Nation, product);
         var amount = Math.Min(requested, stock);
         var value = amount * sellPrice;
@@ -1125,7 +1237,8 @@ public class TurnProcessor
             return MakeResult(order, "No valid product specified", false);
         var pct = parameters.TryGetValue("percentage", out var pe) ? Math.Clamp(pe.GetInt32(), 0, 100) : 100;
 
-        var (_, sellPrice) = MarketPrice[product];
+        var (_, baseSellAll) = MarketPrice[product];
+        var sellPrice = NationAbilities.MarketSellPrice(order.Nation?.Name, baseSellAll);
         var stock = GetStock(order.Nation, product);
         var amount = stock * pct / 100;
         var value = amount * sellPrice;
@@ -1273,21 +1386,27 @@ public class TurnProcessor
         if (pc == null)
             return MakeResult(order, "Must be at a population centre you own to forge armour", false);
 
-        var add = Math.Min(amount, 100 - order.Army.ArmourRank);
-        if (add <= 0) return MakeResult(order, "Armour already at maximum rank (100)", false);
+        var army = order.Army;
+        var maxAdd = Math.Min(amount, 100 - army.HCArmourRank);
+        if (maxAdd <= 0) return MakeResult(order, "Armour already at maximum rank (100)", false);
 
-        var goldCost = add * 5;
-        var leatherCost = add * 5;
-        var steelCost = add * 2;
+        var goldCost = maxAdd * 5;
+        var leatherCost = maxAdd * 5;
+        var steelCost = maxAdd * 2;
         if (order.Nation.Gold < goldCost || order.Nation.Leather < leatherCost || order.Nation.Steel < steelCost)
             return MakeResult(order, $"Insufficient resources to improve armour (need {goldCost}g, {leatherCost} leather, {steelCost} steel)", false);
 
         order.Nation.Gold -= goldCost;
         order.Nation.Leather -= leatherCost;
         order.Nation.Steel -= steelCost;
-        order.Army.ArmourRank += add;
+        army.HCArmourRank += maxAdd;
+        army.LCArmourRank += maxAdd;
+        army.HIArmourRank += maxAdd;
+        army.LIArmourRank += maxAdd;
+        army.ArcherArmourRank += maxAdd;
+        army.MAAArmourRank += maxAdd;
         order.Status = "resolved";
-        order.Result = $"Improved armour rank by {add} (now {order.Army.ArmourRank}) at {pc.Name}";
+        order.Result = $"Improved armour rank by {maxAdd} (now {army.HCArmourRank}) at {pc.Name}";
         return MakeResult(order, order.Result);
     }
 
@@ -1303,21 +1422,27 @@ public class TurnProcessor
         if (pc == null)
             return MakeResult(order, "Must be at a population centre you own to forge weapons", false);
 
-        var add = Math.Min(amount, 100 - order.Army.WeaponRank);
-        if (add <= 0) return MakeResult(order, "Weapons already at maximum rank (100)", false);
+        var army = order.Army;
+        var maxAdd = Math.Min(amount, 100 - army.HCWeaponRank);
+        if (maxAdd <= 0) return MakeResult(order, "Weapons already at maximum rank (100)", false);
 
-        var goldCost = add * 5;
-        var bronzeCost = add * 3;
-        var steelCost = add * 1;
+        var goldCost = maxAdd * 5;
+        var bronzeCost = maxAdd * 3;
+        var steelCost = maxAdd * 1;
         if (order.Nation.Gold < goldCost || order.Nation.Bronze < bronzeCost || order.Nation.Steel < steelCost)
             return MakeResult(order, $"Insufficient resources to improve weapons (need {goldCost}g, {bronzeCost} bronze, {steelCost} steel)", false);
 
         order.Nation.Gold -= goldCost;
         order.Nation.Bronze -= bronzeCost;
         order.Nation.Steel -= steelCost;
-        order.Army.WeaponRank += add;
+        army.HCWeaponRank += maxAdd;
+        army.LCWeaponRank += maxAdd;
+        army.HIWeaponRank += maxAdd;
+        army.LIWeaponRank += maxAdd;
+        army.ArcherWeaponRank += maxAdd;
+        army.MAAWeaponRank += maxAdd;
         order.Status = "resolved";
-        order.Result = $"Improved weapon rank by {add} (now {order.Army.WeaponRank}) at {pc.Name}";
+        order.Result = $"Improved weapon rank by {maxAdd} (now {army.HCWeaponRank}) at {pc.Name}";
         return MakeResult(order, order.Result);
     }
 
@@ -1425,7 +1550,7 @@ public class TurnProcessor
         if (target.IsDead || target.IsKidnapped)
             return MakeResult(order, "Target cannot be kidnapped", false);
 
-        var roll = order.Character.AgentSkill + _rng.Next(1, 7);
+        var roll = NationAbilities.AssassinSkill(order.Nation?.Name, order.Character.AgentSkill) + _rng.Next(1, 7);
         var targetDefense = target.CommandSkill / 2 + _rng.Next(1, 7);
         var success = roll > targetDefense;
 
@@ -1666,13 +1791,18 @@ public class TurnProcessor
         if (pc == null || (!pc.HasPort && !pc.HasHarbour))
             return MakeResult(order, "Must be at a coastal population centre (port/harbour) you own to build ships", false);
 
-        var goldCost = amount * 800;
-        var timberCost = amount * 200;
-        if (order.Nation.Gold < goldCost || order.Nation.Timber < timberCost)
-            return MakeResult(order, $"Insufficient resources for {amount} warships (need {goldCost}g, {timberCost} timber)", false);
+        // Reglamento: 1500 madera + 1000 oro por buque de guerra (dto. nacional
+        // en madera); con poco material se construyen los que se pueda.
+        // (La madera sale de la reserva nacional, no de stores del PC.)
+        const int goldPerWarship = 1000;
+        var timberPerWarship = NationAbilities.ShipTimberCost(order.Nation?.Name);
+        amount = Math.Min(amount, Math.Min(order.Nation.Timber / timberPerWarship, order.Nation.Gold / goldPerWarship));
+        if (amount <= 0)
+            return MakeResult(order, $"Insufficient resources for warships (need {goldPerWarship}g, {timberPerWarship} timber each)", false);
 
+        var goldCost = amount * goldPerWarship;
         order.Nation.Gold -= goldCost;
-        order.Nation.Timber -= timberCost;
+        order.Nation.Timber -= amount * timberPerWarship;
         var navy = order.Nation.Navies.FirstOrDefault(n => n.LocationHex == hex);
         if (navy == null)
         {
@@ -1681,7 +1811,7 @@ public class TurnProcessor
         }
         navy.Warships += amount;
         order.Status = "resolved";
-        order.Result = $"Built {amount} warships at {pc.Name} for {goldCost} gold";
+        order.Result = $"Built {amount} warships at {pc.Name} for {goldCost} gold and {amount * timberPerWarship} timber";
         return MakeResult(order, order.Result);
     }
 
@@ -1698,13 +1828,16 @@ public class TurnProcessor
         if (pc == null || (!pc.HasPort && !pc.HasHarbour))
             return MakeResult(order, "Must be at a coastal population centre (port/harbour) you own to build ships", false);
 
-        var goldCost = amount * 400;
-        var timberCost = amount * 100;
-        if (order.Nation.Gold < goldCost || order.Nation.Timber < timberCost)
-            return MakeResult(order, $"Insufficient resources for {amount} transports (need {goldCost}g, {timberCost} timber)", false);
+        // Reglamento: igual que guerra (1500 + 1000, dto. nacional en madera).
+        const int goldPerTransport = 1000;
+        var timberPerTransport = NationAbilities.ShipTimberCost(order.Nation?.Name);
+        amount = Math.Min(amount, Math.Min(order.Nation.Timber / timberPerTransport, order.Nation.Gold / goldPerTransport));
+        if (amount <= 0)
+            return MakeResult(order, $"Insufficient resources for transports (need {goldPerTransport}g, {timberPerTransport} timber each)", false);
 
+        var goldCost = amount * goldPerTransport;
         order.Nation.Gold -= goldCost;
-        order.Nation.Timber -= timberCost;
+        order.Nation.Timber -= amount * timberPerTransport;
         var navy = order.Nation.Navies.FirstOrDefault(n => n.LocationHex == hex);
         if (navy == null)
         {
@@ -2038,6 +2171,18 @@ public class TurnProcessor
             LightInfantry = (int)(order.Army.LightInfantry * splitRatio),
             Archers = (int)(order.Army.Archers * splitRatio),
             MenAtArms = (int)(order.Army.MenAtArms * splitRatio),
+            HCWeaponRank = order.Army.HCWeaponRank,
+            HCArmourRank = order.Army.HCArmourRank,
+            LCWeaponRank = order.Army.LCWeaponRank,
+            LCArmourRank = order.Army.LCArmourRank,
+            HIWeaponRank = order.Army.HIWeaponRank,
+            HIArmourRank = order.Army.HIArmourRank,
+            LIWeaponRank = order.Army.LIWeaponRank,
+            LIArmourRank = order.Army.LIArmourRank,
+            ArcherWeaponRank = order.Army.ArcherWeaponRank,
+            ArcherArmourRank = order.Army.ArcherArmourRank,
+            MAAWeaponRank = order.Army.MAAWeaponRank,
+            MAAArmourRank = order.Army.MAAArmourRank,
             Morale = order.Army.Morale
         };
 
@@ -2236,11 +2381,14 @@ public class TurnProcessor
     {
         if (order.Character == null) return MakeResult(order, "No mage for research", false);
 
-        // Hechizo objetivo: parÃ¡metro spellId o uno aleatorio aÃºn no conocido
+        // Hechizo objetivo: parámetro spellId o uno aleatorio aún no conocido.
+        // Los perdidos exigen acceso nacional (LOST_SPELL_<id>).
         SpellDefinition def;
         if (parameters.TryGetValue("spellId", out var sidEl) && SpellCatalog.Get(sidEl.GetInt32()) is { } byId)
         {
             def = byId;
+            if (def.IsLost && !NationAbilities.CanLearnLostSpell(order.Nation?.Name, def.Id))
+                return MakeResult(order, $"Lost spell {def.Name} is not available to your nation", false);
         }
         else
         {
@@ -2248,7 +2396,9 @@ public class TurnProcessor
                 .Where(s => s.IsKnown && !s.IsLost)
                 .Select(s => s.SpellId)
                 .ToHashSet();
-            var candidates = SpellCatalog.All.Where(s => !known.Contains(s.Id)).ToList();
+            var candidates = SpellCatalog.All
+                .Where(s => !known.Contains(s.Id) && (!s.IsLost || NationAbilities.CanLearnLostSpell(order.Nation?.Name, s.Id)))
+                .ToList();
             if (candidates.Count == 0)
                 return MakeResult(order, "All spells already known", false);
             def = candidates[_rng.Next(candidates.Count)];
@@ -2262,6 +2412,7 @@ public class TurnProcessor
             Id = Guid.NewGuid().ToString(),
             CharacterId = order.Character.Id,
             SpellId = def.Id,
+            IsLost = def.IsLost,
             IsKnown = true
         });
 
@@ -2425,17 +2576,20 @@ public class TurnProcessor
 
     private object ProcessImproveHarbour(Order order, Dictionary<string, JsonElement> parameters)
     {
-        var cost = 300;
-        if (order.Nation.Gold < cost)
+        // Derivado de la tabla: puerto menos puerto (4000/7500 - 2500/5000).
+        const int goldCost = 1500;
+        const int timberCost = 2500;
+        if (order.Nation.Gold < goldCost || order.Nation.Timber < timberCost)
         {
             order.Status = "failed";
-            order.Result = $"Insufficient gold: need {cost}";
+            order.Result = $"Insufficient resources: need {goldCost} gold and {timberCost} timber";
             return MakeResult(order, order.Result, false);
         }
 
-        order.Nation.Gold -= cost;
+        order.Nation.Gold -= goldCost;
+        order.Nation.Timber -= timberCost;
         order.Status = "resolved";
-        order.Result = $"Harbour improved to port for {cost} gold";
+        order.Result = $"Harbour improved to port for {goldCost} gold and {timberCost} timber";
         return MakeResult(order, order.Result);
     }
 
@@ -2445,12 +2599,16 @@ public class TurnProcessor
         if (hex == null) return MakeResult(order, "No location", false);
         var pc = OwnedPCAt(hex, order.NationId);
         if (pc == null) return MakeResult(order, "Must be at your own population centre", false);
-        var cost = 200;
-        if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
-        order.Nation.Gold -= cost;
+        // Reglamento: puerto 2500 oro + 5000 madera.
+        const int goldCost = 2500;
+        const int timberCost = 5000;
+        if (order.Nation.Gold < goldCost || order.Nation.Timber < timberCost)
+            return MakeResult(order, $"Insufficient resources: need {goldCost} gold and {timberCost} timber", false);
+        order.Nation.Gold -= goldCost;
+        order.Nation.Timber -= timberCost;
         pc.HasHarbour = true;
         order.Status = "resolved";
-        order.Result = $"Harbour added to {pc.Name} for {cost} gold";
+        order.Result = $"Harbour added to {pc.Name} for {goldCost} gold and {timberCost} timber";
         return MakeResult(order, order.Result);
     }
 
@@ -2460,7 +2618,15 @@ public class TurnProcessor
         if (hex == null) return MakeResult(order, "No location", false);
         var pc = OwnedPCAt(hex, order.NationId);
         if (pc == null) return MakeResult(order, "Must be at your own population centre to improve it", false);
-        var cost = 300;
+        // Reglamento: coste de subida según tamaño (camp 2000 … city 10000).
+        int cost = pc.Size.ToLower() switch
+        {
+            "camp" => 2000,
+            "village" => 4000,
+            "town" => 6000,
+            "major town" => 8000,
+            _ => 10000
+        };
         if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
         var roll = order.Character?.EmissarySkill + _rng.Next(1, 7) ?? 8;
         if (roll < 10) return MakeResult(order, $"Improvement failed (roll {roll})", false);
@@ -2485,7 +2651,8 @@ public class TurnProcessor
     {
         var hex = order.Character?.LocationHex ?? order.Army?.LocationHex;
         if (hex == null) return MakeResult(order, "No location for camp", false);
-        var cost = 100;
+        // Reglamento: crear campamento 2000 oro.
+        const int cost = 2000;
         if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
         if (_db.PopulationCentres.Any(p => p.LocationHex == hex && p.NationId == order.NationId))
             return MakeResult(order, "Already have a population centre at this hex", false);
@@ -2542,11 +2709,59 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
+    // 520: automática, +1-10 lealtad propia y +1-5 emisario.
+    private object ProcessInfluenceOwn(Order order, Dictionary<string, JsonElement> parameters)
+    {
+        if (order.Character == null) return MakeResult(order, "No character", false);
+        var hex = order.Character.LocationHex;
+        var pc = OwnedPCAt(hex, order.NationId);
+        if (pc == null) return MakeResult(order, "Must be at one of your population centres", false);
+        if (order.Character.EmissarySkill <= 0) return MakeResult(order, "Needs emissary skill", false);
+        pc.Loyalty = Math.Min(100, pc.Loyalty + _rng.Next(1, 11));
+        order.Character.EmissarySkill = Math.Min(100, order.Character.EmissarySkill + _rng.Next(1, 6));
+        order.Status = "resolved";
+        order.Result = $"Loyalty at {pc.Name} raised to {pc.Loyalty}";
+        return MakeResult(order, order.Result);
+    }
+
+    // 525: +d6>=12, -5-15 lealtad ajena y +1-10 emisario. Sin toma de control
+    // (el reglamento solo da "posibilidad" sin fórmula).
+    private object ProcessInfluenceOther(Order order, Dictionary<string, JsonElement> parameters, Game game)
+    {
+        if (order.Character == null) return MakeResult(order, "No character", false);
+        if (order.Character.EmissarySkill <= 0) return MakeResult(order, "Needs emissary skill", false);
+        var hex = order.Character.LocationHex;
+        var pc = GetPC(game, hex);
+        if (pc == null) return MakeResult(order, "No population centre here", false);
+        if (pc.NationId == order.NationId) return MakeResult(order, "Use 520 on your own centres", false);
+        if (pc.IsHidden) return MakeResult(order, "No visible population centre here", false);
+        bool enemyPresent = game.Nations
+            .SelectMany(n => n.Armies.Select(a => new { a.LocationHex, NationId = n.Id })
+                .Concat(n.Navies.Select(v => new { v.LocationHex, NationId = n.Id })))
+            .Any(u => u.LocationHex == hex && u.NationId != order.NationId
+                && game.Nations.FirstOrDefault(n => n.Id == u.NationId)?.Relations
+                    .FirstOrDefault(r => r.TargetNationId == order.NationId)?.Level <= -1);
+        if (enemyPresent) return MakeResult(order, "Enemy forces present", false);
+        int roll = order.Character.EmissarySkill + _rng.Next(1, 7);
+        if (roll < 12)
+        {
+            order.Status = "resolved";
+            order.Result = $"Influence failed at {pc.Name} (roll {roll})";
+            return MakeResult(order, order.Result);
+        }
+        pc.Loyalty = Math.Max(0, pc.Loyalty - _rng.Next(5, 16));
+        order.Character.EmissarySkill = Math.Min(100, order.Character.EmissarySkill + _rng.Next(1, 11));
+        order.Status = "resolved";
+        order.Result = $"Loyalty at {pc.Name} lowered to {pc.Loyalty} (roll {roll})";
+        return MakeResult(order, order.Result);
+    }
+
     private object ProcessUncoverSecrets(Order order, Dictionary<string, JsonElement> parameters)
     {
-        var roll = order.Character?.EmissarySkill + _rng.Next(1, 7) ?? 8;
+        if (order.Character == null) return MakeResult(order, "No character", false);
+        var eff = NationAbilities.UncoverSkill(order.Nation?.Name, order.Character.EmissarySkill);
+        var roll = eff + _rng.Next(1, 7);
         var success = roll >= 12;
-
         order.Status = "resolved";
         order.Result = success
             ? $"Secrets uncovered (roll {roll})"
@@ -2558,12 +2773,14 @@ public class TurnProcessor
 
     private object ProcessSkillOrder(Order order, string skillType, Dictionary<string, JsonElement> parameters)
     {
-        var skill = skillType switch
+        var skill = (skillType, order.Code) switch
         {
-            "Command" => order.Character.CommandSkill,
-            "Agent" => order.Character.AgentSkill,
-            "Emissary" => order.Character.EmissarySkill,
-            "Mage" => order.Character.MageSkill,
+            ("Command", 925) => NationAbilities.ScoutSkill(order.Nation?.Name, 925, order.Character.AgentSkill, order.Character.CommandSkill),
+            ("Agent", 910) or ("Agent", 915) => NationAbilities.ScoutSkill(order.Nation?.Name, order.Code, order.Character.AgentSkill, order.Character.CommandSkill),
+            ("Command", _) => order.Character.CommandSkill,
+            ("Agent", _) => order.Character.AgentSkill,
+            ("Emissary", _) => order.Character.EmissarySkill,
+            ("Mage", _) => order.Character.MageSkill,
             _ => 8
         };
 
@@ -2826,9 +3043,25 @@ public class TurnProcessor
             case "war":
                 amt = Math.Min(order.Army.WarMachines, amt); order.Army.WarMachines -= amt; dest.WarMachines += amt; break;
             case "weapon":
-                amt = Math.Min(order.Army.WeaponRank, amt); order.Army.WeaponRank -= amt; dest.WeaponRank += amt; break;
+                var wAmt = Math.Min(order.Army.HCWeaponRank, amt);
+                order.Army.HCWeaponRank -= wAmt; dest.HCWeaponRank += wAmt;
+                order.Army.LCWeaponRank -= wAmt; dest.LCWeaponRank += wAmt;
+                order.Army.HIWeaponRank -= wAmt; dest.HIWeaponRank += wAmt;
+                order.Army.LIWeaponRank -= wAmt; dest.LIWeaponRank += wAmt;
+                order.Army.ArcherWeaponRank -= wAmt; dest.ArcherWeaponRank += wAmt;
+                order.Army.MAAWeaponRank -= wAmt; dest.MAAWeaponRank += wAmt;
+                amt = wAmt;
+                break;
             case "armour":
-                amt = Math.Min(order.Army.ArmourRank, amt); order.Army.ArmourRank -= amt; dest.ArmourRank += amt; break;
+                var aAmt = Math.Min(order.Army.HCArmourRank, amt);
+                order.Army.HCArmourRank -= aAmt; dest.HCArmourRank += aAmt;
+                order.Army.LCArmourRank -= aAmt; dest.LCArmourRank += aAmt;
+                order.Army.HIArmourRank -= aAmt; dest.HIArmourRank += aAmt;
+                order.Army.LIArmourRank -= aAmt; dest.LIArmourRank += aAmt;
+                order.Army.ArcherArmourRank -= aAmt; dest.ArcherArmourRank += aAmt;
+                order.Army.MAAArmourRank -= aAmt; dest.MAAArmourRank += aAmt;
+                amt = aAmt;
+                break;
             case "troops":
                 var hc = Math.Min(order.Army.HeavyCavalry, amt); order.Army.HeavyCavalry -= hc; dest.HeavyCavalry += hc;
                 var rest = amt - hc;
@@ -2887,9 +3120,36 @@ public class TurnProcessor
     {
         var pc = ResolvePC(order, p, game);
         if (pc == null) return MakeResult(order, "No population centre", false);
-        var level = p.TryGetValue("level", out var l) ? l.GetInt32() : 1;
-        pc.Fortification = level switch { 4 => "fortress", 3 => "castle", 2 => "walls", 1 => "palisade", _ => null };
-        order.Status = "resolved"; order.Result = $"Fortified {pc.Name} to {pc.Fortification}";
+        if (pc.NationId != order.NationId)
+            return MakeResult(order, "Can only fortify your own population centres", false);
+        if ((pc.Fortification ?? "").Contains("itadel", StringComparison.OrdinalIgnoreCase))
+            return MakeResult(order, $"{pc.Name} already has citadel-class fortifications", false);
+        if (_fortifiedThisTurn.Contains(pc.Id))
+            return MakeResult(order, $"{pc.Name} was already fortified this turn", false);
+        if (order.Character == null) return MakeResult(order, "No character", false);
+        int roll = order.Character.CommandSkill + _rng.Next(1, 7);
+        if (roll < 12)
+            return MakeResult(order, $"Failed to fortify {pc.Name} (roll {roll})", false);
+        // Escalera oficial Tower-Fort-Castle-Keep-Citadel: solo sube un nivel
+        // por turno (el parámetro 1-5 equivale al tipo; por defecto el siguiente).
+        var ladder = new[] { "Tower", "Fort", "Castle", "Keep", "Citadel" };
+        int cur = FortLadderIndex(pc.Fortification);
+        int want = cur + 1;
+        if (p.TryGetValue("level", out var lv)) want = Math.Clamp(lv.GetInt32(), 1, 5) - 1;
+        if (want != cur + 1 || want < 0 || want > 4)
+            return MakeResult(order, $"Must build exactly one level (next: {(cur + 1 <= 4 ? ladder[cur + 1] : "none")})", false);
+        var fort = ladder[want];
+        // Costes D-2. Madera de stores del PC.
+        int timber = NationAbilities.FortTimberCost(order.Nation?.Name, fort ?? "palisade");
+        int gold = NationAbilities.FortGoldCost(fort ?? "palisade");
+        if (pc.Stores < timber || order.Nation.Gold < gold)
+            return MakeResult(order, $"Insufficient stores: need {timber} timber and {gold} gold", false);
+        pc.Stores -= timber;
+        order.Nation.Gold -= gold;
+        pc.Fortification = fort;
+        _fortifiedThisTurn.Add(pc.Id);
+        order.Character.CommandSkill = Math.Min(100, order.Character.CommandSkill + _rng.Next(1, 6));
+        order.Status = "resolved"; order.Result = $"Fortified {pc.Name} to {pc.Fortification} for {timber} timber and {gold} gold (roll {roll})";
         return MakeResult(order, order.Result);
     }
 
@@ -2897,6 +3157,24 @@ public class TurnProcessor
     {
         var pc = ResolvePC(order, p, game);
         if (pc == null) return MakeResult(order, "No population centre", false);
+        if (pc.NationId == order.NationId) return MakeResult(order, "Cannot threaten your own centre (use 520)", false);
+        if (pc.IsHidden) return MakeResult(order, "No visible population centre here", false);
+        // Solo naciones desagradas/odiadas (nivel <= -1 hacia ellas).
+        var rel = order.Nation.Relations.FirstOrDefault(r => r.TargetNationId == pc.NationId);
+        if (rel == null || rel.Level > -1)
+            return MakeResult(order, "Can only threaten disliked or hated nations", false);
+        // Solo comandante de ejército/armada.
+        bool commands = order.Character?.ArmyId != null || order.Army != null
+            || game.Nations.SelectMany(n => n.Navies).Any(v => v.CommanderId == order.Character?.Id);
+        if (!commands) return MakeResult(order, "Only an army or navy commander can threaten", false);
+        // Sin enemigos presentes (los que nos consideran enemigos).
+        bool enemyPresent = game.Nations
+            .SelectMany(n => n.Armies.Select(a => new { a.LocationHex, NationId = n.Id })
+                .Concat(n.Navies.Select(v => new { v.LocationHex, NationId = n.Id })))
+            .Any(u => u.LocationHex == pc.LocationHex && u.NationId != order.NationId
+                && game.Nations.FirstOrDefault(n => n.Id == u.NationId)?.Relations
+                    .FirstOrDefault(r => r.TargetNationId == order.NationId)?.Level <= -1);
+        if (enemyPresent) return MakeResult(order, "Enemy forces present", false);
         var amt = p.TryGetValue("amount", out var a) ? Math.Max(0, a.GetInt32()) : 10;
         pc.Loyalty = Math.Max(0, pc.Loyalty - amt);
         order.Status = "resolved"; order.Result = $"Threatened {pc.Name}, loyalty down to {pc.Loyalty}";
@@ -2916,9 +3194,13 @@ public class TurnProcessor
     {
         var pc = ResolvePC(order, p, game);
         if (pc == null) return MakeResult(order, "No population centre", false);
+        // Reglamento: 25000 oro.
+        const int cost = 25000;
+        if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
+        order.Nation.Gold -= cost;
         foreach (var c in order.Nation.PopulationCentres) c.IsCapital = false;
         pc.IsCapital = true;
-        order.Status = "resolved"; order.Result = $"Capital relocated to {pc.Name}";
+        order.Status = "resolved"; order.Result = $"Capital relocated to {pc.Name} for {cost} gold";
         return MakeResult(order, order.Result);
     }
 
@@ -2934,8 +3216,14 @@ public class TurnProcessor
     private object ProcessNameCharacter(Order order, Dictionary<string, JsonElement> p, string type)
     {
         if (!p.TryGetValue("name", out var nEl)) return MakeResult(order, "Missing name", false);
+        // Reglamento: multi (725) 10000 oro; resto 5000.
+        int cost = order.Code == 725 ? 10000 : 5000;
+        if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
         var capital = order.Nation.PopulationCentres.FirstOrDefault(x => x.IsCapital)
                       ?? order.Nation.PopulationCentres.FirstOrDefault();
+        // Rango inicial 40 si la nación tiene NAME_<TIPO>_40; sigilo/desafío
+        // extra (1d6) si tiene NEWCHAR_STEALTH / NEWCHAR_CHALLENGE.
+        var startSkill = NationAbilities.NameCharacterSkill(order.Nation?.Name, type);
         var ch = new Character
         {
             Id = Guid.NewGuid().ToString(),
@@ -2944,29 +3232,36 @@ public class TurnProcessor
             Type = type,
             LocationHex = capital?.LocationHex ?? "0,0",
             MaxHealth = 100,
-            Health = 100
+            Health = 100,
+            Stealth = NationAbilities.HasForNation(order.Nation?.Name, "NEWCHAR_STEALTH") ? _rng.Next(1, 7) : 0,
+            ChallengeRank = NationAbilities.HasForNation(order.Nation?.Name, "NEWCHAR_CHALLENGE") ? _rng.Next(1, 7) : 0
         };
-        if (type == "mage") ch.MageSkill = 15;
-        if (type == "agent") ch.AgentSkill = 15;
-        if (type == "emissary") ch.EmissarySkill = 15;
-        if (type == "commander") ch.CommandSkill = 15;
+        if (type == "mage") ch.MageSkill = startSkill;
+        if (type == "agent") ch.AgentSkill = startSkill;
+        if (type == "emissary") ch.EmissarySkill = startSkill;
+        if (type == "commander") ch.CommandSkill = startSkill;
         _db.Characters.Add(ch);
-        order.Status = "resolved"; order.Result = $"Named new {type}: {ch.Name}";
+        order.Nation.Gold -= cost;
+        order.Status = "resolved"; order.Result = $"Named new {type}: {ch.Name} for {cost} gold";
         return MakeResult(order, order.Result);
     }
 
     private object ProcessHireArmy(Order order, Dictionary<string, JsonElement> p)
     {
         if (!p.TryGetValue("name", out var nEl)) return MakeResult(order, "Missing name", false);
+        // Reglamento: 5000 de oro fijos; gratis con HIRE_FREE.
+        var cost = NationAbilities.HireArmyCost(order.Nation?.Name);
+        if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
         var capital = order.Nation.PopulationCentres.FirstOrDefault(x => x.IsCapital)
                       ?? order.Nation.PopulationCentres.FirstOrDefault();
+        order.Nation.Gold -= cost;
         var army = new Army
         {
             Id = Guid.NewGuid().ToString(),
             NationId = order.NationId,
             Name = nEl.GetString()!,
             LocationHex = capital?.LocationHex ?? "0,0",
-            Morale = 30,
+            Morale = NationAbilities.HireMorale(order.Nation?.Name),
             Training = 10
         };
         _db.Armies.Add(army);
@@ -2988,6 +3283,14 @@ public class TurnProcessor
     private object ProcessScoutArmy(Order order, Dictionary<string, JsonElement> p, Game game)
     {
         var hex = p.TryGetValue("hex", out var h) ? h.GetString()! : (order.Character?.LocationHex ?? order.Army?.LocationHex ?? "");
+        var eff = NationAbilities.ScoutSkill(order.Nation?.Name, 905, order.Character?.AgentSkill ?? 0, order.Character?.CommandSkill ?? 0);
+        var sroll = eff + _rng.Next(1, 7);
+        if (sroll < 12)
+        {
+            order.Status = "resolved";
+            order.Result = $"Scout at {hex}: nothing found (roll {sroll})";
+            return MakeResult(order, order.Result);
+        }
         var seen = game.Nations.Where(n => n.Id != order.NationId)
             .SelectMany(n => n.Armies).Where(a => a.LocationHex == hex)
             .Select(a => $"{a.Name} ({a.Nation.Name}) HC:{a.HeavyCavalry} HI:{a.HeavyInfantry}").ToList();
@@ -2999,6 +3302,14 @@ public class TurnProcessor
     private object ProcessScoutPC(Order order, Dictionary<string, JsonElement> p, Game game)
     {
         var hex = p.TryGetValue("hex", out var h) ? h.GetString()! : (order.Character?.LocationHex ?? "");
+        var eff = NationAbilities.ScoutSkill(order.Nation?.Name, 920, order.Character?.AgentSkill ?? 0, order.Character?.CommandSkill ?? 0);
+        var sroll = eff + _rng.Next(1, 7);
+        if (sroll < 10)
+        {
+            order.Status = "resolved";
+            order.Result = $"Scout PC at {hex}: nothing found (roll {sroll})";
+            return MakeResult(order, order.Result);
+        }
         var seen = game.Nations.Where(n => n.Id != order.NationId)
             .SelectMany(n => n.PopulationCentres).Where(pc => pc.LocationHex == hex)
             .Select(pc => $"{pc.Name} ({pc.Nation?.Name ?? "?"}) L:{pc.Loyalty}").ToList();
@@ -3010,6 +3321,14 @@ public class TurnProcessor
     private object ProcessScoutCharacters(Order order, Dictionary<string, JsonElement> p, Game game)
     {
         var hex = p.TryGetValue("hex", out var h) ? h.GetString()! : (order.Character?.LocationHex ?? "");
+        var eff = NationAbilities.ScoutSkill(order.Nation?.Name, 930, order.Character?.AgentSkill ?? 0, order.Character?.CommandSkill ?? 0);
+        var sroll = eff + _rng.Next(1, 7);
+        if (sroll < 12)
+        {
+            order.Status = "resolved";
+            order.Result = $"Scout chars at {hex}: none found (roll {sroll})";
+            return MakeResult(order, order.Result);
+        }
         var seen = game.Nations.Where(n => n.Id != order.NationId)
             .SelectMany(n => n.Characters).Where(c => c.LocationHex == hex && !c.IsDead)
             .Select(c => $"{c.Name} ({c.Nation.Name})").ToList();
@@ -3042,7 +3361,8 @@ public class TurnProcessor
         if (!p.TryGetValue("targetId", out var t)) return MakeResult(order, "Missing targetId", false);
         var target = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == t.GetString());
         if (target == null) return MakeResult(order, "Target not found", false);
-        var roll = order.Character.AgentSkill + _rng.Next(1, 7);
+        var effA = NationAbilities.AssassinSkill(order.Nation?.Name, order.Character.AgentSkill);
+        var roll = effA + _rng.Next(1, 7);
         if (roll >= 12)
         {
             target.Health = 0; target.IsDead = true;
@@ -3112,42 +3432,88 @@ public class TurnProcessor
 
     private object ProcessDestroyBridge(Order order, Dictionary<string, JsonElement> p)
     {
-        var hex = p.TryGetValue("hex", out var h) ? h.GetString() : (order.Character?.LocationHex ?? order.Army?.LocationHex);
+        // Reglamento: personaje con mando; si va suelto exige PC propia en el hex
+        // (el comandante de ejercito/armada no la necesita). Exito por rango de mando.
+        var ch = order.Character;
+        if (ch == null) return MakeResult(order, "No character", false);
+        var hex = p.TryGetValue("hex", out var h) ? h.GetString() : ch.LocationHex;
         if (hex == null) return MakeResult(order, "No location", false);
         var tile = TileAt(order.Nation.GameId, hex);
         if (tile == null) return MakeResult(order, "No such hex", false);
+        if (!tile.HasBridge) return MakeResult(order, $"No bridge at {hex}", false);
+        bool commands = ch.ArmyId != null || _db.Navies.Any(n => n.CommanderId == ch.Id);
+        if (!commands && !_db.PopulationCentres.Any(pc => pc.LocationHex == hex && pc.NationId == ch.NationId))
+            return MakeResult(order, "Destroying a bridge alone requires one of your population centres in the hex", false);
+        int roll = ch.CommandSkill + _rng.Next(1, 7);
+        if (roll < 12)
+            return MakeResult(order, $"Failed to destroy the bridge at {hex} (roll {roll})", false);
         tile.HasBridge = false;
-        order.Status = "resolved"; order.Result = $"Bridge at {hex} destroyed";
+        order.Status = "resolved"; order.Result = $"Bridge at {hex} destroyed (roll {roll})";
         return MakeResult(order, order.Result);
     }
     private object ProcessBuildBridge(Order order, Dictionary<string, JsonElement> p)
     {
-        var hex = p.TryGetValue("hex", out var h) ? h.GetString() : (order.Character?.LocationHex ?? order.Army?.LocationHex);
+        // Reglamento: personaje con mando (+PC propia en el hex salvo comandante);
+        // menor: 5000 madera + 2500 oro; mayor: 10000 madera + 5000 oro;
+        // el mayor exige camino (une las dos mitades); sin vado/puente previo.
+        // Exito por rango de mando (madera/oro solo se cobran si sale).
+        var ch = order.Character;
+        if (ch == null) return MakeResult(order, "No character", false);
+        var hex = p.TryGetValue("hex", out var h) ? h.GetString() : ch.LocationHex;
         if (hex == null) return MakeResult(order, "No location", false);
-        var cost = 100;
-        if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
         var tile = TileAt(order.Nation.GameId, hex);
         if (tile == null) return MakeResult(order, "No such hex", false);
-        order.Nation.Gold -= cost;
+        if (!tile.HasMajorRiver && !tile.HasMinorRiver)
+            return MakeResult(order, $"No river at {hex}", false);
+        if (tile.HasBridge || tile.HasFord)
+            return MakeResult(order, $"A ford or bridge already exists at {hex}", false);
+        bool major = tile.HasMajorRiver;
+        if (major && !tile.HasRoad)
+            return MakeResult(order, $"A bridge over a major river at {hex} requires a road", false);
+        int timber = major ? 10000 : 5000;
+        int gold = major ? 5000 : 2500;
+        if (order.Nation.Timber < timber || order.Nation.Gold < gold)
+            return MakeResult(order, $"Insufficient stores: need {timber} timber and {gold} gold", false);
+        bool commands = ch.ArmyId != null || _db.Navies.Any(n => n.CommanderId == ch.Id);
+        if (!commands && !_db.PopulationCentres.Any(pc => pc.LocationHex == hex && pc.NationId == ch.NationId))
+            return MakeResult(order, "Building a bridge alone requires one of your population centres in the hex", false);
+        int roll = ch.CommandSkill + _rng.Next(1, 7);
+        int need = major ? 18 : 12;
+        if (roll < need)
+            return MakeResult(order, $"Failed to build the bridge at {hex} (roll {roll} vs {need})", false);
+        order.Nation.Timber -= timber;
+        order.Nation.Gold -= gold;
         tile.HasBridge = true;
-        order.Status = "resolved"; order.Result = $"Bridge built at {hex} for {cost} gold";
+        order.Status = "resolved"; order.Result = $"Bridge built at {hex} for {timber} timber and {gold} gold (roll {roll})";
         return MakeResult(order, order.Result);
     }
     private object ProcessSabotageBridge(Order order, Dictionary<string, JsonElement> p)
     {
-        var hex = p.TryGetValue("hex", out var h) ? h.GetString() : (order.Character?.LocationHex ?? order.Army?.LocationHex);
+        // Reglamento: agente; se opone el mejor guardian del hex (orden 605),
+        // sin guardian vale dificultad fija. Exito por rango de agente.
+        var ch = order.Character;
+        if (ch == null) return MakeResult(order, "No character", false);
+        var hex = p.TryGetValue("hex", out var h) ? h.GetString() : ch.LocationHex;
         if (hex == null) return MakeResult(order, "No location", false);
         var tile = TileAt(order.Nation.GameId, hex);
         if (tile == null) return MakeResult(order, "No such hex", false);
+        if (!tile.HasBridge) return MakeResult(order, $"No bridge at {hex}", false);
+        var guardIds = _db.Guards.Where(g => g.TargetId == hex).Select(g => g.CharacterId).ToList();
+        var guards = _db.Characters.Where(c => guardIds.Contains(c.Id) && !c.IsDead).ToList();
+        int defense = guards.Count > 0 ? guards.Max(g => g.AgentSkill) + _rng.Next(1, 7) : 14;
+        int roll = ch.AgentSkill + _rng.Next(1, 7);
+        if (roll < defense)
+            return MakeResult(order, $"Bridge sabotage at {hex} thwarted (roll {roll} vs {defense})", false);
         tile.HasBridge = false;
-        order.Status = "resolved"; order.Result = $"Bridge at {hex} sabotaged";
+        order.Status = "resolved"; order.Result = $"Bridge at {hex} sabotaged (roll {roll} vs {defense})";
         return MakeResult(order, order.Result);
     }
     private object ProcessPostCamp(Order order, Dictionary<string, JsonElement> p)
     {
         var hex = order.Character?.LocationHex ?? order.Army?.LocationHex;
         if (hex == null) return MakeResult(order, "No location for camp", false);
-        var cost = 100;
+        // Reglamento: asentar campamento 4000 oro.
+        const int cost = 4000;
         if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
         if (_db.PopulationCentres.Any(pc => pc.LocationHex == hex && pc.NationId == order.NationId))
             return MakeResult(order, "Already have a population centre at this hex", false);

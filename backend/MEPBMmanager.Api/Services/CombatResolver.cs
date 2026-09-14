@@ -16,6 +16,12 @@ public class CombatResolver
     private static int[] TroopCounts(Army a)
         => new[] { a.HeavyCavalry, a.LightCavalry, a.HeavyInfantry, a.LightInfantry, a.Archers, a.MenAtArms };
 
+    private static int[] TroopWeaponRanks(Army a)
+        => new[] { a.HCWeaponRank, a.LCWeaponRank, a.HIWeaponRank, a.LIWeaponRank, a.ArcherWeaponRank, a.MAAWeaponRank };
+
+    private static int[] TroopArmourRanks(Army a)
+        => new[] { a.HCArmourRank, a.LCArmourRank, a.HIArmourRank, a.LIArmourRank, a.ArcherArmourRank, a.MAAArmourRank };
+
     private static readonly string[] BestTactic = { "ch", "su", "fl", "hr", "am", "hr" };
     private static readonly string[] WorstTactic = { "am", "am", "su", "ch", "fl", "ch" };
     private static readonly Dictionary<string, string> BeatsTactic = new()
@@ -184,9 +190,10 @@ public class CombatResolver
     private int ComputeConstitution(Army army, Game game)
     {
         var counts = TroopCounts(army);
+        var armourRanks = TroopArmourRanks(army);
         int con = 0;
         for (int i = 0; i < 6; i++)
-            con += (int)(counts[i] * TroopBase[i].Con * (1 + army.ArmourRank / 100.0));
+            con += (int)(counts[i] * TroopBase[i].Con * (1 + armourRanks[i] / 100.0));
         // Bonificación por fortificaciones de un centro del propio país en el hex
         var pc = game.Nations.SelectMany(n => n.PopulationCentres)
             .FirstOrDefault(p => p.NationId == army.NationId && p.LocationHex == army.LocationHex);
@@ -217,7 +224,7 @@ public class CombatResolver
     private int ModifierPercent(Army army, Game game, int troopIdx, string? tactic, string terrain)
     {
         int training = army.Training;
-        int weapon = army.WeaponRank;
+        int weapon = TroopWeaponRanks(army)[troopIdx];
         int terrainMod = TerrainMod.TryGetValue(terrain, out var arr) ? arr[troopIdx] : 80;
         int tacticMod = TroopTacticModifier(troopIdx, tactic);
         int cmd = CommanderChallengeRank(army, game);
@@ -841,6 +848,9 @@ public class CombatResolver
             "swamp" => (AttackBonus: -30, DefenseBonus: 10),
             "rough" => (AttackBonus: -15, DefenseBonus: 15),
             "plains" => (AttackBonus: 10, DefenseBonus: 0),
+            "desert" => (AttackBonus: 5, DefenseBonus: 0),
+            "shore" => (AttackBonus: 0, DefenseBonus: 5),
+            "coastal" => (AttackBonus: 0, DefenseBonus: 0),
             "river" => (AttackBonus: -25, DefenseBonus: 5),
             _ => (AttackBonus: 0, DefenseBonus: 0)
         };

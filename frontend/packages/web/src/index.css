@@ -5,3 +5,22 @@
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
+
+.leaflet-tooltip.hex-tooltip {
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: pre-line;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.leaflet-tooltip.hex-tooltip::before {
+  border-top-color: #4b5563;
+}
+
+.hex-marker {
+  pointer-events: none !important;
+}

@@ -20,6 +20,7 @@ public class Game
     public ICollection<GameEvent> Events { get; set; } = new List<GameEvent>();
     public ICollection<MarketPrice> MarketPrices { get; set; } = new List<MarketPrice>();
     public ICollection<Player> Players { get; set; } = new List<Player>();
+    public ICollection<GameAdmin> GameAdmins { get; set; } = new List<GameAdmin>();
     public ICollection<Order> Orders { get; set; } = new List<Order>();
 
     public GameType GameType { get; set; } = null!;

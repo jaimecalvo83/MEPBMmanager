@@ -16,6 +16,7 @@ public class SpellDefinition
     public string Name { get; set; } = string.Empty;
     public string College { get; set; } = string.Empty;
     public SpellType Type { get; set; }
+    public bool IsLost { get; set; } = false;
 }
 
 public static class SpellCatalog
@@ -24,7 +25,7 @@ public static class SpellCatalog
     {
         // HEAL (Earth)
         new() { Id = 1, Name = "Heal Wounds", College = "Earth", Type = SpellType.Heal },
-        new() { Id = 2, Name = "Cure Disease", College = "Earth", Type = SpellType.Heal },
+        new() { Id = 2, Name = "Minor Heal", College = "Earth", Type = SpellType.Heal },
 
         // CONJURING (Astral)
         new() { Id = 3, Name = "Conjure Gold", College = "Astral", Type = SpellType.Conjuring },
@@ -45,7 +46,19 @@ public static class SpellCatalog
 
         // ENCHANT
         new() { Id = 12, Name = "Enchant Weapon", College = "Earth", Type = SpellType.Enchant },
-        new() { Id = 13, Name = "Bless Army", College = "Astral", Type = SpellType.Enchant }
+        new() { Id = 13, Name = "Bless Army", College = "Astral", Type = SpellType.Enchant },
+
+        // BÁSICOS oficiales vistos en turnos 0 (no perdidos; el 2 corrige nombre)
+        new() { Id = 302, Name = "Long Stride", College = "Air", Type = SpellType.Movement },
+        new() { Id = 304, Name = "Fast Stride", College = "Air", Type = SpellType.Movement },
+
+        // LOST (solo investigables con acceso nacional: LOST_SPELL_<id>)
+        new() { Id = 244, Name = "Fearful Hearts", College = "Death", Type = SpellType.Combat, IsLost = true },
+        new() { Id = 246, Name = "Summon Storms", College = "Death", Type = SpellType.Combat, IsLost = true },
+        new() { Id = 248, Name = "Fanaticism", College = "Death", Type = SpellType.Combat, IsLost = true },
+        new() { Id = 314, Name = "Teleport (Lost)", College = "Air", Type = SpellType.Movement, IsLost = true },
+        new() { Id = 508, Name = "Conjure Mounts", College = "Astral", Type = SpellType.Conjuring, IsLost = true },
+        new() { Id = 512, Name = "Conjure Hordes", College = "Astral", Type = SpellType.Conjuring, IsLost = true }
     };
 
     public static SpellDefinition? Get(int spellId) => All.FirstOrDefault(s => s.Id == spellId);

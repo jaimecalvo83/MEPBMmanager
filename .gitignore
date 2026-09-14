@@ -36,3 +36,11 @@ pnpm-debug.log*
 # ── OS ───────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── MEPBMmanager: fuentes y volcados locales (no compilan ni se despliegan) ──
+wiki_*.txt
+db_*.sql
+query.sql
+*backup*.json
+digitize_*.py
+.opencode/

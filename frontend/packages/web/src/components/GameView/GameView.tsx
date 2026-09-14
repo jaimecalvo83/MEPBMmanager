@@ -1,43 +1,122 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
-import { useGameState, useProcessTurn } from '../../hooks/useGameState';
+import { useGameState } from '../../hooks/useGameState';
 import { gamesApi } from '../../api/client';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
 import HexMap from '../Map/HexMap';
 import OrdersPanel from '../Orders/OrdersPanel';
 import MessagesPanel from '../Messages/MessagesPanel';
-import NationPicker from '../NationPicker/NationPicker';
-import { useQuery } from 'react-query';
+
+interface PlayerInfo {
+  id: string;
+  userId: string;
+  username: string;
+  email: string;
+  isReady: boolean;
+  acceptedAt: string | null;
+  wantsToPlayWith: { userId: string; username: string } | null;
+}
+
+interface AdminInfo {
+  id: string;
+  userId: string;
+  username: string;
+  email: string;
+  isReady: boolean;
+  acceptedAt: string | null;
+}
+
+type TabType = 'nation' | 'map' | 'cities' | 'armies' | 'characters' | 'orders' | 'messages' | 'relations';
 
 export default function GameView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { logout } = useAuthStore();
-  const { data: gameState, isLoading, error } = useGameState(id!);
-  const processTurn = useProcessTurn(id!);
+  const { user } = useAuthStore();
+  const queryClient = useQueryClient();
+  const [wantsToPlayWithId, setWantsToPlayWithId] = useState('');
+  const [newPlayerEmail, setNewPlayerEmail] = useState('');
+  const [newPlayerIsAdmin, setNewPlayerIsAdmin] = useState(false);
   const [selectedHex, setSelectedHex] = useState<{ q: number; r: number } | null>(null);
-  const [activeTab, setActiveTab] = useState<'map' | 'orders' | 'messages'>('map');
-  const [showPicker, setShowPicker] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>('nation');
+  const [selectedNationId, setSelectedNationId] = useState<string | undefined>(undefined);
 
-  const isForbidden = !!error && (error as any)?.response?.status === 403;
+  const isTestAdmin = user?.roleId === 'test_admin' || user?.role === 'test_admin' || user?.role === 'Test Admin';
 
-  const { data: notPlayerGame } = useQuery(
-    ['game-not-player', id],
+  // Fetch game state (with optional nation switching)
+  const { data: gameState, isLoading } = useGameState(id!, selectedNationId);
+  const gameStatus = gameState?.game?.status;
+  const isSetup = gameStatus === 'setup';
+
+  // ── Setup queries (only for setup phase) ──
+  const { data: playersData } = useQuery(
+    ['game-players', id],
     async () => {
-      const { data } = await gamesApi.get(id!);
-      return data as { id: string; name: string; status: string };
+      const { data } = await gamesApi.getPlayers(id!);
+      return data as { players: PlayerInfo[] };
     },
-    { enabled: isForbidden, retry: false }
+    { enabled: !!id && isSetup }
   );
 
-  const handleProcessTurn = async () => {
-    if (!id) return;
-    try {
-      await processTurn.mutateAsync();
-    } catch {
-      // error handled by mutation state
+  const { data: adminsData } = useQuery(
+    ['game-admins', id],
+    async () => {
+      const { data } = await gamesApi.getAdmins(id!);
+      return data as { admins: AdminInfo[] };
+    },
+    { enabled: !!id && isSetup }
+  );
+
+  // ── Mutations ──
+  const acceptMutation = useMutation(
+    async (wantsToPlayWithUserId?: string) => {
+      await gamesApi.accept(id!, wantsToPlayWithUserId);
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['game-players', id]);
+        queryClient.invalidateQueries(['game-admins', id]);
+        queryClient.invalidateQueries(['game', id]);
+      }
     }
-  };
+  );
+
+  const addPlayerMutation = useMutation(
+    async ({ email, isAdmin }: { email: string; isAdmin: boolean }) => {
+      await gamesApi.addPlayer(id!, email, isAdmin);
+    },
+    {
+      onSuccess: () => {
+        setNewPlayerEmail('');
+        setNewPlayerIsAdmin(false);
+        queryClient.invalidateQueries(['game-players', id]);
+        queryClient.invalidateQueries(['game-admins', id]);
+      }
+    }
+  );
+
+  const removePlayerMutation = useMutation(
+    async (playerId: string) => {
+      await gamesApi.removePlayer(id!, playerId);
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['game-players', id]);
+        queryClient.invalidateQueries(['game-admins', id]);
+      }
+    }
+  );
+
+  const startGameMutation = useMutation(
+    async () => {
+      await gamesApi.start(id!);
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['game', id]);
+      }
+    }
+  );
 
   if (isLoading) {
     return (
@@ -47,181 +126,913 @@ export default function GameView() {
     );
   }
 
-  if (isForbidden && notPlayerGame) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        {showPicker && notPlayerGame.status === 'setup' && (
-          <NationPicker
-            gameId={notPlayerGame.id}
-            onClose={() => setShowPicker(false)}
-            onJoined={() => {
-              setShowPicker(false);
-              window.location.reload();
-            }}
-          />
-        )}
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-mepbm-gold mb-2">{notPlayerGame.name}</h2>
-          {notPlayerGame.status === 'setup' ? (
-            <>
-              <p className="text-gray-400 mb-6">You are not a player in this game yet.</p>
-              <button
-                onClick={() => setShowPicker(true)}
-                className="px-6 py-3 bg-blue-600 text-white text-lg rounded hover:bg-blue-500 transition"
-              >
-                Choose Nation & Join
-              </button>
-            </>
-          ) : (
-            <p className="text-gray-400 mb-6">You are not a player in this game.</p>
-          )}
-          <div className="mt-6">
-            <button
-              onClick={() => navigate('/')}
-              className="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition"
-            >
-              Back to Games
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  const currentUserId = user?.id;
+  const isGameAdmin = isSetup
+    ? (adminsData?.admins?.some(a => a.userId === currentUserId) || false)
+    : isTestAdmin || !!gameState?.player;
+
+  const shouldSeeAll = isTestAdmin || isGameAdmin;
+
+  // ── SETUP VIEW ──
+  if (isSetup) {
+    return <SetupView
+      gameState={gameState!}
+      playersData={playersData}
+      adminsData={adminsData}
+      currentUserId={currentUserId!}
+      isTestAdmin={isTestAdmin}
+      isGameAdmin={isGameAdmin}
+      shouldSeeAll={shouldSeeAll}
+      wantsToPlayWithId={wantsToPlayWithId}
+      setWantsToPlayWithId={setWantsToPlayWithId}
+      newPlayerEmail={newPlayerEmail}
+      setNewPlayerEmail={setNewPlayerEmail}
+      newPlayerIsAdmin={newPlayerIsAdmin}
+      setNewPlayerIsAdmin={setNewPlayerIsAdmin}
+      acceptMutation={acceptMutation}
+      addPlayerMutation={addPlayerMutation}
+      removePlayerMutation={removePlayerMutation}
+      startGameMutation={startGameMutation}
+      navigate={navigate}
+    />;
   }
 
-  if (!gameState) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-400 mb-4">Game not found</p>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 bg-mepbm-gold text-gray-900 rounded hover:bg-yellow-400"
-          >
-            Back to Games
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // ── ACTIVE GAME VIEW ──
+  return <ActiveGameView
+    gameState={gameState!}
+    isTestAdmin={isTestAdmin}
+    selectedNationId={selectedNationId}
+    setSelectedNationId={setSelectedNationId}
+    selectedHex={selectedHex}
+    setSelectedHex={setSelectedHex}
+    activeTab={activeTab}
+    setActiveTab={setActiveTab}
+    navigate={navigate}
+  />;
+}
+
+// ═══════════════════════════════════════════
+// SETUP VIEW
+// ═══════════════════════════════════════════
+function SetupView({
+  gameState, playersData, adminsData, currentUserId, isGameAdmin, shouldSeeAll,
+  wantsToPlayWithId, setWantsToPlayWithId, newPlayerEmail, setNewPlayerEmail,
+  newPlayerIsAdmin, setNewPlayerIsAdmin,
+  acceptMutation, addPlayerMutation, removePlayerMutation, startGameMutation, navigate
+}: any) {
+  const currentPlayer = playersData?.players?.find((p: PlayerInfo) => p.userId === currentUserId);
+  const hasAccepted = currentPlayer?.isReady === true;
+  const isPlayer = !!currentPlayer;
+
+  const adminUserIds = new Set(adminsData?.admins?.map((a: AdminInfo) => a.userId) || []);
+  const playerUserIds = new Set(playersData?.players?.map((p: PlayerInfo) => p.userId) || []);
+
+  const allParticipants = [
+    ...(playersData?.players || []),
+    ...(adminsData?.admins || [])
+      .filter((a: AdminInfo) => !playerUserIds.has(a.userId))
+      .map((a: AdminInfo) => ({
+        id: a.id, userId: a.userId, username: a.username, email: a.email,
+        isReady: a.isReady, acceptedAt: a.acceptedAt,
+        wantsToPlayWith: null as { userId: string; username: string } | null
+      }))
+  ];
+
+  const confirmedParticipants = allParticipants.filter((p: any) => p.isReady);
+  const visibleParticipants = shouldSeeAll ? allParticipants : confirmedParticipants;
+  const otherPlayers = playersData?.players?.filter((p: PlayerInfo) => p.userId !== currentUserId) || [];
+
+  const getRole = (playerUserId: string): string => {
+    const isAdmin = adminUserIds.has(playerUserId);
+    const isP = playerUserIds.has(playerUserId);
+    if (isAdmin && isP) return 'Player + Admin';
+    if (isAdmin) return 'Admin';
+    return 'Player';
+  };
+
+  const pendingAdmins = adminsData?.admins?.filter((a: AdminInfo) => !a.isReady) || [];
+  const pendingPlayers = playersData?.players?.filter((p: PlayerInfo) => !p.isReady) || [];
+  const canStart = isGameAdmin && pendingAdmins.length === 0 && pendingPlayers.length === 0 && allParticipants.length >= 1;
+
+  const handleAddPlayer = () => {
+    if (!newPlayerEmail.trim()) return;
+    addPlayerMutation.mutate({ email: newPlayerEmail.trim(), isAdmin: newPlayerIsAdmin });
+  };
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <header className="bg-gray-800 border-b border-gray-700 px-6 py-3">
-        <div className="flex justify-between items-center">
+      <div className="p-6">
+        <h2 className="text-xl font-bold text-mepbm-gold mb-2">Game: {gameState?.game?.name}</h2>
+        <p className="text-gray-400 mb-4">Status: {gameState.game.status} | Waiting for players...</p>
+
+        {isGameAdmin && (
+          <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-blue-600">
+            <h3 className="text-lg font-semibold text-white mb-2">Game Setup</h3>
+            <p className="text-gray-400 mb-3 text-sm">
+              {pendingAdmins.length > 0 && `${pendingAdmins.length} admin(s) pending. `}
+              {pendingPlayers.length > 0 && `${pendingPlayers.length} player(s) pending. `}
+              {pendingAdmins.length === 0 && pendingPlayers.length === 0 && allParticipants.length >= 1 && 'All confirmed! '}
+              {allParticipants.length < 1 && 'Need at least 1 participant. '}
+              {canStart ? 'Ready to start!' : 'Not ready yet.'}
+            </p>
+            <button
+              onClick={() => startGameMutation.mutate()}
+              disabled={!canStart || startGameMutation.isLoading}
+              className="px-6 py-3 bg-blue-600 text-white font-bold rounded hover:bg-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {startGameMutation.isLoading ? 'Starting...' : 'Start Game'}
+            </button>
+            {startGameMutation.isError && (
+              <p className="text-red-400 text-sm mt-2">Failed to start game</p>
+            )}
+          </div>
+        )}
+
+        {isGameAdmin && (
+          <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-gray-600">
+            <h3 className="text-lg font-semibold text-white mb-3">Add Player</h3>
+            <div className="flex gap-3 items-end">
+              <div className="flex-1">
+                <input
+                  type="email"
+                  value={newPlayerEmail}
+                  onChange={(e) => setNewPlayerEmail(e.target.value)}
+                  placeholder="player@email.com"
+                  className="w-full p-3 bg-gray-700 rounded border border-gray-600 focus:border-mepbm-gold focus:outline-none"
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer()}
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-400 whitespace-nowrap">
+                <input type="checkbox" checked={newPlayerIsAdmin}
+                  onChange={(e) => setNewPlayerIsAdmin(e.target.checked)} className="rounded" />
+                Admin
+              </label>
+              <button
+                onClick={handleAddPlayer}
+                disabled={!newPlayerEmail.trim() || addPlayerMutation.isLoading}
+                className="px-6 py-3 bg-green-600 text-white font-bold rounded hover:bg-green-500 transition disabled:opacity-50"
+              >
+                {addPlayerMutation.isLoading ? 'Adding...' : 'Add'}
+              </button>
+            </div>
+            {addPlayerMutation.isError && (
+              <p className="text-red-400 text-sm mt-2">
+                {(addPlayerMutation.error as any)?.response?.data?.error || 'Failed to add player'}
+              </p>
+            )}
+          </div>
+        )}
+
+        {isPlayer && !hasAccepted && (
+          <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-yellow-600">
+            <h3 className="text-lg font-semibold text-yellow-400 mb-3">You are invited to this game</h3>
+            <p className="text-gray-400 mb-3">Choose a player you want to play with (optional):</p>
+            <select
+              value={wantsToPlayWithId}
+              onChange={(e) => setWantsToPlayWithId(e.target.value)}
+              className="w-full p-3 bg-gray-700 rounded border border-gray-600 focus:border-mepbm-gold focus:outline-none mb-4"
+            >
+              <option value="">No preference</option>
+              {otherPlayers.map((p: PlayerInfo) => (
+                <option key={p.userId} value={p.userId}>{p.username} ({p.email})</option>
+              ))}
+            </select>
+            <button
+              onClick={() => acceptMutation.mutate(wantsToPlayWithId || undefined)}
+              disabled={acceptMutation.isLoading}
+              className="px-6 py-3 bg-green-600 text-white font-bold rounded hover:bg-green-500 transition disabled:opacity-50"
+            >
+              {acceptMutation.isLoading ? 'Confirming...' : 'Confirm Attendance'}
+            </button>
+          </div>
+        )}
+
+        {isPlayer && hasAccepted && (
+          <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-green-600">
+            <p className="text-green-400 font-semibold">You have confirmed your attendance</p>
+            {currentPlayer?.wantsToPlayWith && (
+              <p className="text-gray-400 mt-1">Playing with: {currentPlayer.wantsToPlayWith.username}</p>
+            )}
+          </div>
+        )}
+
+        <div className="bg-gray-800 rounded-lg p-4 mb-6">
+          <h3 className="text-lg font-semibold text-white mb-2">
+            Participants ({confirmedParticipants.length} confirmed / {visibleParticipants.length} total)
+          </h3>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-700">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Role</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                {shouldSeeAll && (
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Playing With</th>
+                )}
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700">
+              {visibleParticipants.map((participant: any) => {
+                const role = getRole(participant.userId);
+                return (
+                  <tr key={participant.id}>
+                    <td className="px-4 py-3">
+                      <div className="text-sm font-medium text-white">{participant.username || participant.email}</div>
+                      <div className="text-xs text-gray-500">{participant.email}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        role === 'Admin' ? 'bg-purple-600 text-white' :
+                        role === 'Player + Admin' ? 'bg-blue-600 text-white' :
+                        'bg-gray-600 text-white'
+                      }`}>{role}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded ${participant.isReady ? 'bg-green-600 text-white' : 'bg-yellow-600 text-white'}`}>
+                        {participant.isReady ? 'Confirmed' : 'Pending'}
+                      </span>
+                    </td>
+                    {shouldSeeAll && (
+                      <td className="px-4 py-3 text-sm text-gray-400">
+                        {participant.wantsToPlayWith?.username || '-'}
+                      </td>
+                    )}
+                    <td className="px-4 py-3">
+                      {!participant.isReady && isGameAdmin && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Remove ${participant.username || participant.email}?`))
+                              removePlayerMutation.mutate(participant.id);
+                          }}
+                          className="text-red-400 hover:text-red-300 text-xs font-semibold"
+                        >Remove</button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <button onClick={() => navigate('/')}
+          className="px-6 py-3 bg-mepbm-gold text-white font-bold rounded hover:bg-yellow-400 transition">
+          Back to Games
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// ACTIVE GAME VIEW
+// ═══════════════════════════════════════════
+function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedNationId, selectedHex, setSelectedHex, activeTab, setActiveTab, navigate }: any) {
+  const nation = gameState?.nation;
+  const nations = gameState?.nations || [];
+  const characters = gameState?.characters || [];
+  const armies = gameState?.armies || [];
+  const populationCentres = gameState?.populationCentres || [];
+  const hexTiles = gameState?.hexTiles || [];
+  const currentTurn = gameState?.currentTurn;
+
+  // Only admins see the nation sidebar
+  const canSwitchNations = isTestAdmin || nations.length > 1;
+
+  const tabs: { key: TabType; label: string }[] = [
+    { key: 'nation', label: 'Nation' },
+    { key: 'map', label: 'Map' },
+    { key: 'cities', label: `Cities (${populationCentres.length})` },
+    { key: 'armies', label: `Armies (${armies.length})` },
+    { key: 'characters', label: `Characters (${characters.length})` },
+    { key: 'orders', label: 'Orders' },
+    { key: 'messages', label: 'Messages' },
+    { key: 'relations', label: 'Relations' },
+  ];
+
+  // Group nations by allegiance for sidebar
+  const freeNations = nations.filter((n: any) => n.allegiance === 'free_peoples');
+  const darkNations = nations.filter((n: any) => n.allegiance === 'dark_servants');
+  const neutralNations = nations.filter((n: any) => n.allegiance === 'neutral');
+
+  return (
+    <div className="min-h-screen bg-gray-900 flex">
+      {/* ── Nation sidebar (only for admins) ── */}
+      {canSwitchNations && (
+        <div className="w-56 bg-gray-800 border-r border-gray-700 flex-shrink-0 overflow-y-auto">
+          <div className="p-3 border-b border-gray-700">
+            <h3 className="text-xs font-bold text-mepbm-gold uppercase tracking-wider">Nations</h3>
+          </div>
+          <div className="p-2 space-y-1">
+            {freeNations.length > 0 && (
+              <div className="mb-2">
+                <div className="px-2 py-1 text-[10px] font-bold text-green-400 uppercase tracking-wider">Free Peoples</div>
+                {freeNations.map((n: any) => (
+                  <button
+                    key={n.id}
+                    onClick={() => setSelectedNationId(n.id)}
+                    className={`w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2 transition ${
+                      n.id === (selectedNationId || nation?.id)
+                        ? 'bg-gray-700 border border-mepbm-gold text-white'
+                        : 'text-gray-300 hover:bg-gray-750 hover:text-white'
+                    }`}
+                  >
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: n.color }} />
+                    <span className="truncate">{n.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {darkNations.length > 0 && (
+              <div className="mb-2">
+                <div className="px-2 py-1 text-[10px] font-bold text-red-400 uppercase tracking-wider">Dark Servants</div>
+                {darkNations.map((n: any) => (
+                  <button
+                    key={n.id}
+                    onClick={() => setSelectedNationId(n.id)}
+                    className={`w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2 transition ${
+                      n.id === (selectedNationId || nation?.id)
+                        ? 'bg-gray-700 border border-mepbm-gold text-white'
+                        : 'text-gray-300 hover:bg-gray-750 hover:text-white'
+                    }`}
+                  >
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: n.color }} />
+                    <span className="truncate">{n.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {neutralNations.length > 0 && (
+              <div className="mb-2">
+                <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Neutral</div>
+                {neutralNations.map((n: any) => (
+                  <button
+                    key={n.id}
+                    onClick={() => setSelectedNationId(n.id)}
+                    className={`w-full text-left px-3 py-2 rounded text-sm flex items-center gap-2 transition ${
+                      n.id === (selectedNationId || nation?.id)
+                        ? 'bg-gray-700 border border-mepbm-gold text-white'
+                        : 'text-gray-300 hover:bg-gray-750 hover:text-white'
+                    }`}
+                  >
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: n.color }} />
+                    <span className="truncate">{n.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Main content ── */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <div className="bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/')}
-              className="text-gray-400 hover:text-white"
-            >
-              ← Back
+            <button onClick={() => navigate('/')} className="text-mepbm-gold hover:text-yellow-400 text-sm font-semibold">
+              ← Games
             </button>
-            <h1 className="text-xl font-bold text-mepbm-gold">{gameState.game.name}</h1>
-            <span className="text-sm text-gray-400">Turn {gameState.game.currentTurn}</span>
-            <button
-              onClick={handleProcessTurn}
-              disabled={processTurn.isLoading}
-              className="px-3 py-1.5 bg-red-600 text-white text-sm font-bold rounded hover:bg-red-500 transition disabled:opacity-50"
-            >
-              {processTurn.isLoading ? 'Processing…' : 'Process Turn'}
-            </button>
-            {processTurn.isError && (
-              <span className="text-sm text-red-400">
-                {(processTurn.error as any)?.response?.data?.error || 'Failed to process turn'}
+            <h1 className="text-lg font-bold text-white">{gameState?.game?.name}</h1>
+            {currentTurn && (
+              <span className="text-sm text-gray-400">
+                Turn {currentTurn.number} · {currentTurn.season} · Deadline: {new Date(currentTurn.deadline).toLocaleDateString()}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-gray-400">
-              {gameState.nation ? (
-                <>
-                  <span className="text-mepbm-gold">{gameState.nation.name}</span>
-                  {' | '}
-                  Gold: {gameState.nation.gold} | Food: {gameState.nation.food} | Tax: {gameState.nation.taxRate}%
-                </>
-              ) : (
-                <span className="text-mepbm-gold">No nation assigned yet</span>
+          {nation && (
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded" style={{ backgroundColor: nation.color }} />
+              <span className="font-bold text-white">{nation.name}</span>
+              <span className="text-sm text-gray-400">({nation.allegiance})</span>
+            </div>
+          )}
+        </div>
+
+        {/* Nation resources bar */}
+        {nation && (
+          <div className="bg-gray-800 border-b border-gray-700 px-6 py-2 flex gap-6 text-sm">
+            <span className="text-yellow-400">Gold: {nation.gold}</span>
+            <span className="text-green-400">Food: {nation.food}</span>
+            <span className="text-amber-600">Timber: {nation.timber}</span>
+            <span className="text-orange-400">Leather: {nation.leather}</span>
+            <span className="text-gray-300">Bronze: {nation.bronze}</span>
+            <span className="text-blue-300">Steel: {nation.steel}</span>
+            {nation.mithril > 0 && <span className="text-purple-400">Mithril: {nation.mithril}</span>}
+            <span className="text-emerald-400">Mounts: {nation.mounts}</span>
+            <span className="text-gray-500">Tax: {nation.taxRate}%</span>
+          </div>
+        )}
+
+        {/* Tab bar */}
+        <div className="bg-gray-800 border-b border-gray-700 px-6 flex gap-1 overflow-x-auto">
+          {tabs.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`px-4 py-2 text-sm font-semibold rounded-t transition whitespace-nowrap ${
+                activeTab === key
+                  ? 'bg-gray-900 text-mepbm-gold border-t border-x border-gray-700'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div className="p-6 flex-1 overflow-y-auto">
+          {activeTab === 'nation' && (
+            <NationTab
+              nation={nation}
+              populationCentres={populationCentres}
+              armies={armies}
+              characters={characters}
+              currentTurn={currentTurn}
+            />
+          )}
+          {activeTab === 'map' && (
+            <div className="space-y-4">
+              <HexMap
+                hexes={hexTiles}
+                armies={armies}
+                characters={characters}
+                populationCentres={populationCentres}
+                selectedHex={selectedHex}
+                onHexClick={(q: number, r: number) => setSelectedHex({ q, r })}
+              />
+
+              {selectedHex && (
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <h3 className="text-sm font-bold text-mepbm-gold mb-2">
+                    Hex: {selectedHex.q}, {selectedHex.r}
+                  </h3>
+                  <div className="text-sm text-gray-400">
+                    {(() => {
+                      const hex = hexTiles.find((h: any) => h.q === selectedHex.q && h.r === selectedHex.r);
+                      if (!hex) return <span>No data</span>;
+                      const feats = [
+                        hex.hasMajorRiver ? 'Major river' : null,
+                        hex.hasMinorRiver ? 'Minor river' : null,
+                        hex.hasRoad ? 'Road' : null,
+                        hex.hasFord ? 'Ford' : null,
+                        hex.hasBridge ? 'Bridge' : null,
+                      ].filter(Boolean);
+                      return <span>Terrain: {hex.terrain}{feats.length > 0 ? ` (${feats.join(' · ')})` : ''}</span>;
+                    })()}
+                    {(() => {
+                      const pc = populationCentres.find((p: any) => p.locationHex === `${selectedHex.q},${selectedHex.r}`);
+                      return pc ? <span className="ml-4 text-mepbm-gold">★ {pc.name}{pc.isCapital ? ' (Capital)' : ''}</span> : null;
+                    })()}
+                    {(() => {
+                      const army = armies.find((a: any) => a.locationHex === `${selectedHex.q},${selectedHex.r}`);
+                      return army ? <span className="ml-4 text-red-400">⚔ {army.name}</span> : null;
+                    })()}
+                  </div>
+                </div>
               )}
             </div>
-            <button onClick={logout} className="text-sm text-gray-500 hover:text-red-400">
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+          )}
 
-      <div className="flex">
-        <nav className="w-48 bg-gray-800 min-h-[calc(100vh-52px)] p-4 border-r border-gray-700">
-          <div className="space-y-2">
-            {(['map', 'orders', 'messages'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`w-full text-left px-3 py-2 rounded transition ${
-                  activeTab === tab
-                    ? 'bg-mepbm-gold text-gray-900 font-bold'
-                    : 'text-gray-400 hover:bg-gray-700'
-                }`}
-              >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </button>
-            ))}
-          </div>
+          {activeTab === 'cities' && (
+            <CitiesTab populationCentres={populationCentres} hexTiles={hexTiles} taxRate={nation?.taxRate} />
+          )}
 
-          <div className="mt-8 space-y-4">
-            <div>
-              <h3 className="text-xs text-gray-500 uppercase mb-2">Characters</h3>
-              {gameState.characters.map((char) => (
-                <div key={char.id} className="text-xs text-gray-400 py-1">
-                  {char.name} <span className="text-gray-600">({char.type})</span>
-                </div>
-              ))}
-            </div>
+          {activeTab === 'armies' && (
+            <ArmiesTab armies={armies} characters={characters} populationCentres={populationCentres} hexTiles={hexTiles} nationName={nation?.name} />
+          )}
 
-            <div>
-              <h3 className="text-xs text-gray-500 uppercase mb-2">Armies</h3>
-              {gameState.armies.map((army) => (
-                <div key={army.id} className="text-xs text-gray-400 py-1">
-                  {army.name} <span className="text-gray-600">(M:{army.morale})</span>
-                </div>
-              ))}
-            </div>
-
-            <div>
-              <h3 className="text-xs text-gray-500 uppercase mb-2">Population Centres</h3>
-              {gameState.populationCentres.map((pc) => (
-                <div key={pc.id} className="text-xs text-gray-400 py-1">
-                  {pc.name} <span className="text-gray-600">({pc.size})</span>
-                  {pc.isCapital && <span className="text-mepbm-gold ml-1">★</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-        </nav>
-
-        <main className="flex-1 p-4">
-          {activeTab === 'map' && (
-            <HexMap
-              hexes={gameState.hexTiles}
-              armies={gameState.armies}
-              characters={gameState.characters}
-              populationCentres={gameState.populationCentres}
-              onHexClick={(q, r) => setSelectedHex({ q, r })}
-              selectedHex={selectedHex}
-            />
+          {activeTab === 'characters' && (
+            <CharactersTab characters={characters} armies={armies} populationCentres={populationCentres} nationName={nation?.name} />
           )}
 
           {activeTab === 'orders' && (
-            <OrdersPanel
-              gameId={gameState.game.id}
-              characters={gameState.characters}
-            />
+            <OrdersPanel gameId={gameState?.game?.id} characters={characters} />
           )}
 
           {activeTab === 'messages' && (
-            <MessagesPanel gameId={gameState.game.id} />
+            <MessagesPanel gameId={gameState?.game?.id} />
           )}
-        </main>
+
+          {activeTab === 'relations' && (
+            <RelationsTab
+              gameId={gameState?.game?.id}
+              nationId={selectedNationId || nation?.id}
+              nationName={nation?.name}
+              allNations={gameState?.allNations || []}
+              relations={gameState?.relations || []}
+            />
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// RELATIONS TAB
+// ═══════════════════════════════════════════
+const RELATION_LEVELS = [
+  { value: 2, label: 'Aliado' },
+  { value: 1, label: 'Tolerante' },
+  { value: 0, label: 'Neutral' },
+  { value: -1, label: 'Hostil' },
+  { value: -2, label: 'Enemigo' },
+];
+
+const ALLEGIANCE_LABELS: Record<string, string> = {
+  free_peoples: 'Pueblos Libres',
+  dark_servants: 'Sirvientes Oscuros',
+  neutral: 'Neutral',
+};
+
+function relationBadge(level: number) {
+  const color =
+    level >= 2 ? 'bg-green-600 text-white'
+    : level === 1 ? 'bg-blue-600 text-white'
+    : level === 0 ? 'bg-gray-600 text-white'
+    : level === -1 ? 'bg-orange-600 text-white'
+    : 'bg-red-600 text-white';
+  const label = RELATION_LEVELS.find((l) => l.value === level)?.label ?? `${level}`;
+  return <span className={`px-2 py-1 rounded text-xs ${color}`}>{label} ({level})</span>;
+}
+
+function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
+  gameId: string;
+  nationId?: string;
+  nationName?: string;
+  allNations: any[];
+  relations: any[];
+}) {
+  const queryClient = useQueryClient();
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const mutation = useMutation(
+    async ({ targetId, level }: { targetId: string; level: number }) => {
+      setSavingId(targetId);
+      await gamesApi.setRelation(gameId, nationId!, targetId, level);
+    },
+    {
+      onSuccess: () => {
+        setSavingId(null);
+        queryClient.invalidateQueries(['game', gameId]);
+      },
+      onError: () => setSavingId(null),
+    }
+  );
+
+  if (!nationId) {
+    return <div className="text-gray-400">Selecciona una nación para ver sus relaciones.</div>;
+  }
+
+  const relByTarget = new Map<string, number>();
+  for (const r of relations) relByTarget.set(r.targetNationId, r.level);
+  const others = (allNations || []).filter((n: any) => n.id !== nationId);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 text-sm text-gray-300">
+        Relaciones de <span className="font-bold text-white">{nationName}</span>.
+        Nivel &gt; 0 (tolerante o aliado) permite el paso de tus ejércitos; 0 o menos lo bloquea.
+      </div>
+      <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-700 bg-gray-750">
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Nación</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Bando</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Relación</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Cambiar a</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-700">
+            {others.map((n: any) => {
+              const level = relByTarget.has(n.id) ? relByTarget.get(n.id)! : 0;
+              return (
+                <tr key={n.id} className="hover:bg-gray-750">
+                  <td className="px-4 py-3">
+                    <span className="text-sm font-medium text-white flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: n.color }} />
+                      {n.name}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-300">{ALLEGIANCE_LABELS[n.allegiance] || n.allegiance}</td>
+                  <td className="px-4 py-3 text-sm">{relationBadge(level)}</td>
+                  <td className="px-4 py-3 text-sm">
+                    <select
+                      className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600"
+                      value={level}
+                      disabled={savingId === n.id}
+                      onChange={(e) => mutation.mutate({ targetId: n.id, level: parseInt(e.target.value, 10) })}
+                    >
+                      {RELATION_LEVELS.map((l) => (
+                        <option key={l.value} value={l.value}>{l.label} ({l.value})</option>
+                      ))}
+                    </select>
+                    {savingId === n.id && <span className="ml-2 text-xs text-gray-400">Guardando…</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// NATION TAB (turn-0 style overview)
+// ═══════════════════════════════════════════
+function NationTab({ nation, populationCentres, armies, characters, currentTurn }: {
+  nation: any;
+  populationCentres: any[];
+  armies: any[];
+  characters: any[];
+  currentTurn: any;
+}) {
+  if (!nation) {
+    return <div className="text-gray-400">No nation selected.</div>;
+  }
+  const capital = populationCentres.find((p: any) => p.isCapital);
+  const abilities: any[] = nation.abilities || [];
+  const stats = [
+    { label: 'Cities', value: populationCentres.length },
+    { label: 'Armies', value: armies.length },
+    { label: 'Characters', value: characters.length },
+    { label: 'Tax rate', value: `${nation.taxRate ?? ''}%` },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="flex items-center gap-3">
+          <div className="w-6 h-6 rounded-full" style={{ backgroundColor: nation.color }} />
+          <div>
+            <h2 className="text-2xl font-bold text-white">{nation.name}</h2>
+            <p className="text-sm text-gray-400">
+              {ALLEGIANCE_LABELS[nation.allegiance] || nation.allegiance}
+              {currentTurn ? ` · Turn ${currentTurn.number}${currentTurn.season ? ` · ${currentTurn.season}` : ''}` : ''}
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+          {stats.map((s) => (
+            <div key={s.label} className="bg-gray-750 rounded-lg p-3 border border-gray-700">
+              <div className="text-xs text-gray-400 uppercase">{s.label}</div>
+              <div className="text-lg font-bold text-mepbm-gold">{s.value}</div>
+            </div>
+          ))}
+        </div>
+        {capital && (
+          <p className="mt-3 text-sm text-gray-300">
+            ★ Capital: {capital.name} <span className="text-gray-500">@ {capital.locationHex}</span>
+          </p>
+        )}
+      </div>
+      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <h3 className="text-sm font-bold text-mepbm-gold uppercase tracking-wider mb-3">Special Nation Abilities</h3>
+        {abilities.length === 0 ? (
+          <p className="text-sm text-gray-400">—</p>
+        ) : (
+          <ul className="list-disc list-inside space-y-1">
+            {abilities.map((a: any) => (
+              <li key={a.id} className="text-sm text-gray-200">
+                <span className="font-mono text-xs text-gray-500 mr-2">{a.id}</span>{a.name}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Shared turn-0 helpers ──
+function terrainAt(hexTiles: any[], locationHex: string): string {
+  const [q, r] = locationHex.split(',').map((v) => parseInt(v.trim(), 10));
+  const hex = hexTiles.find((h: any) => h.q === q && h.r === r);
+  return hex ? hex.terrain : '?';
+}
+
+function pcSentence(populationCentres: any[], locationHex: string, nationName?: string): string | null {
+  const pc = populationCentres.find((p: any) => p.locationHex === locationHex);
+  if (!pc) return null;
+  const fort = pc.fortification ? ` / ${pc.fortification}` : '';
+  return `The ${pc.size}${fort} of ${pc.name} flying the flag of ${nationName || 'us'} is here.`;
+}
+
+// ═══════════════════════════════════════════
+// CITIES TAB (turn-0 style cards)
+// ═══════════════════════════════════════════
+const CITY_RESOURCES = [
+  { key: 'gold', label: 'Gold', color: 'text-yellow-400' },
+  { key: 'food', label: 'Food', color: 'text-green-400' },
+  { key: 'timber', label: 'Timber', color: 'text-amber-600' },
+  { key: 'leather', label: 'Leather', color: 'text-orange-400' },
+  { key: 'bronze', label: 'Bronze', color: 'text-gray-300' },
+  { key: 'steel', label: 'Steel', color: 'text-blue-300' },
+  { key: 'mithril', label: 'Mithril', color: 'text-purple-400' },
+  { key: 'mounts', label: 'Mounts', color: 'text-emerald-400' },
+];
+
+function pcGoldIncome(pc: any, taxRate: number): number {
+  const base = ({ city: 100, 'major town': 75, town: 50, village: 25 } as Record<string, number>)[pc.size?.toLowerCase()] ?? 0;
+  return Math.max(0, pc.production) + base * taxRate;
+}
+
+function pcResources(pc: any, taxRate: number): Record<string, { production: number; stores: number }> {
+  return {
+    gold: { production: pcGoldIncome(pc, taxRate), stores: 0 },
+    food: { production: 0, stores: 0 },
+    timber: { production: 0, stores: pc.stores },
+    leather: { production: 0, stores: 0 },
+    bronze: { production: 0, stores: 0 },
+    steel: { production: 0, stores: 0 },
+    mithril: { production: 0, stores: 0 },
+    mounts: { production: 0, stores: 0 },
+  };
+}
+
+function CitiesTab({ populationCentres, hexTiles, taxRate }: { populationCentres: any[]; hexTiles: any[]; taxRate?: number }) {
+  if (populationCentres.length === 0) {
+    return <div className="text-gray-400">No population centres visible.</div>;
+  }
+
+  const docks = (pc: any) => pc.hasPort ? 'Port' : pc.hasHarbour ? 'Harbour' : 'None';
+
+  return (
+    <div className="space-y-4">
+      {populationCentres.map((pc: any) => {
+        const rate = taxRate ?? 30;
+        const resources = pcResources(pc, rate);
+        return (
+          <div key={pc.id} className="bg-gray-800 rounded-lg p-5 border border-gray-700">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-lg font-bold text-white">
+                {pc.isCapital ? '★ ' : '▢ '}{pc.name}{pc.isCapital ? ' (Capital)' : ''}
+              </h3>
+            </div>
+            <p className="text-sm text-gray-400 mt-1">
+              Location: @ {pc.locationHex} in {terrainAt(hexTiles, pc.locationHex)}
+            </p>
+            <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 mt-3 text-sm">
+              <div><dt className="inline text-gray-500">Size: </dt><dd className="inline text-gray-200 capitalize">{pc.size}</dd></div>
+              <div><dt className="inline text-gray-500">Fortifications: </dt><dd className="inline text-gray-200">{pc.fortification || 'None'}</dd></div>
+              <div><dt className="inline text-gray-500">Loyalty: </dt><dd className="inline text-gray-200">{pc.loyalty}</dd></div>
+              <div><dt className="inline text-gray-500">Docks: </dt><dd className="inline text-gray-200">{docks(pc)}</dd></div>
+              <div><dt className="inline text-gray-500">Hidden?: </dt><dd className="inline text-gray-200">{pc.isHidden ? 'Yes' : 'No'}</dd></div>
+              <div><dt className="inline text-gray-500">Sieged?: </dt><dd className="inline text-gray-200">{pc.isSieged ? 'Yes' : 'No'}</dd></div>
+              <div><dt className="inline text-gray-500">Tax: </dt><dd className="inline text-gray-200">{rate}%</dd></div>
+              <div><dt className="inline text-gray-500">Mined gold: </dt><dd className="inline text-gray-200">{Math.max(0, pc.production)}</dd></div>
+            </dl>
+            <div className="mt-4 border-t border-gray-700 pt-3">
+              <h4 className="text-sm font-bold text-gray-300 mb-2">Resources (turn)</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                {CITY_RESOURCES.map((r) => (
+                  <div key={r.key} className="bg-gray-900 rounded p-2 border border-gray-800">
+                    <div className={`font-semibold ${r.color}`}>{r.label}</div>
+                    <div className="text-gray-300 mt-1">Prod: <span className="text-gray-100">{resources[r.key].production}</span></div>
+                    <div className="text-gray-300">Stores: <span className="text-gray-100">{resources[r.key].stores}</span></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// ARMIES TAB (turn-0 style blocks)
+// ═══════════════════════════════════════════
+const TROOP_ROWS = [
+  { key: 'heavyCavalry', label: 'Heavy Cavalry', w: 'hcWeaponRank', a: 'hcArmourRank' },
+  { key: 'lightCavalry', label: 'Light Cavalry', w: 'lcWeaponRank', a: 'lcArmourRank' },
+  { key: 'heavyInfantry', label: 'Heavy Infantry', w: 'hiWeaponRank', a: 'hiArmourRank' },
+  { key: 'lightInfantry', label: 'Light Infantry', w: 'liWeaponRank', a: 'liArmourRank' },
+  { key: 'archers', label: 'Archers', w: 'archerWeaponRank', a: 'archerArmourRank' },
+  { key: 'menAtArms', label: 'Men-at-Arms', w: 'maaWeaponRank', a: 'maaArmourRank' },
+];
+
+function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName }: {
+  armies: any[]; characters: any[]; populationCentres: any[]; hexTiles: any[]; nationName?: string;
+}) {
+  if (armies.length === 0) {
+    return <div className="text-gray-400">No armies visible.</div>;
+  }
+
+  const charById = new Map<string, any>();
+  for (const c of characters) charById.set(c.id, c);
+
+  return (
+    <div className="space-y-4">
+      {armies.map((army: any) => {
+        const commander = army.commanderId ? charById.get(army.commanderId) : null;
+        const pcLine = pcSentence(populationCentres, army.locationHex, nationName);
+        return (
+          <div key={army.id} className="bg-gray-800 rounded-lg p-5 border border-gray-700">
+            <p className="text-sm text-gray-200">
+              <span className="font-bold text-white">Army Commander: {commander ? commander.name : 'None'}</span>
+              <span className="text-gray-400"> — Location: @ {army.locationHex} in {terrainAt(hexTiles, army.locationHex)}</span>
+            </p>
+            <p className="text-sm text-gray-300 mt-1">Morale: {army.morale ?? 0}</p>
+            <table className="w-full mt-2 text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-500 uppercase">
+                  <th className="py-1 pr-3">Troops</th>
+                  <th className="py-1 pr-3">Training</th>
+                  <th className="py-1 pr-3">Weapon</th>
+                  <th className="py-1 pr-3">Armor</th>
+                  <th className="py-1 pr-3 text-right"># Troops</th>
+                  <th className="py-1">Troop Type</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700">
+                {TROOP_ROWS.filter((t) => (army[t.key] || 0) > 0).map((t) => (
+                  <tr key={t.key} className="text-gray-200">
+                    <td className="py-1 pr-3">{t.label}</td>
+                    <td className="py-1 pr-3 font-mono">{army.training ?? 0}</td>
+                    <td className="py-1 pr-3 font-mono">{army[t.w] ?? 0}</td>
+                    <td className="py-1 pr-3 font-mono">{army[t.a] ?? 0}</td>
+                    <td className="py-1 pr-3 text-right font-mono">{army[t.key]}</td>
+                    <td className="py-1 text-gray-400">{t.label}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-sm text-gray-300 mt-2">
+              Food: {army.food ?? 0} · War Machines: {army.warMachines ?? 0}
+            </p>
+            {pcLine && <p className="text-sm text-gray-400 mt-1">{pcLine}</p>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════
+// CHARACTERS TAB (turn-0 style cards)
+// ═══════════════════════════════════════════
+function CharactersTab({ characters, armies, populationCentres, nationName }: {
+  characters: any[]; armies: any[]; populationCentres: any[]; nationName?: string;
+}) {
+  if (characters.length === 0) {
+    return <div className="text-gray-400">No characters visible.</div>;
+  }
+
+  const armyById = new Map<string, any>();
+  for (const a of armies) armyById.set(a.id, a);
+
+  const typeColor: Record<string, string> = {
+    commander: 'bg-blue-600',
+    agent: 'bg-purple-600',
+    emissary: 'bg-teal-600',
+    mage: 'bg-orange-600',
+  };
+
+  return (
+    <div className="space-y-4">
+      {characters.map((char: any) => {
+        const army = char.armyId ? armyById.get(char.armyId) : null;
+        const pcLine = pcSentence(populationCentres, char.locationHex, nationName);
+        const artifacts: any[] = char.artifacts || [];
+        const spells: any[] = char.spells || [];
+        return (
+          <div key={char.id} className="bg-gray-800 rounded-lg p-5 border border-gray-700">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-lg font-bold text-white">{char.name}</h3>
+              <span className={`text-xs px-2 py-1 rounded text-white ${typeColor[char.type] || 'bg-gray-600'}`}>
+                {char.type}
+              </span>
+              {char.isChampion && <span className="text-xs px-2 py-1 rounded bg-yellow-600 text-white">Champion</span>}
+              {char.isDead && <span className="text-xs px-2 py-1 rounded bg-red-600 text-white">Dead</span>}
+              {char.isKidnapped && <span className="text-xs px-2 py-1 rounded bg-orange-600 text-white">Kidnapped</span>}
+            </div>
+            <p className="text-sm text-gray-200 mt-2">
+              Ranks: Command {char.commandSkill} · Agent {char.agentSkill} · Emissary {char.emissarySkill} · Mage {char.mageSkill}
+            </p>
+            <p className="text-sm text-gray-300">
+              Health {char.health} · Stealth {char.stealth ?? 0} · Challenge {char.challengeRank ?? 0}
+            </p>
+            <p className="text-sm text-gray-300">
+              Artifacts: {artifacts.length > 0 ? artifacts.map((a: any) => a.name).join(', ') : '—'}
+            </p>
+            <p className="text-sm text-gray-300">
+              Spells: {spells.length > 0 ? spells.map((s: any) => `#${s.spellId} ${s.name}`).join(', ') : '—'}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">
+              {army ? `${char.name} commands an army at ${char.locationHex}.` : `${char.name} is currently at ${char.locationHex}.`}
+              {pcLine ? ` ${pcLine}` : ''}
+            </p>
+          </div>
+        );
+      })}
     </div>
   );
 }

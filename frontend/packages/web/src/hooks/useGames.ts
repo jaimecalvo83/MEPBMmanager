@@ -12,7 +12,15 @@ export function useGames() {
 export function useCreateGame() {
   const queryClient = useQueryClient();
   return useMutation(
-    (payload: { name: string; gameTypeCode?: string }) => gamesApi.create(payload),
+    (payload: { name: string; gameTypeCode?: string; playerEmails?: string[]; adminEmails?: string[] }) => gamesApi.create(payload),
+    { onSuccess: () => queryClient.invalidateQueries('games') }
+  );
+}
+
+export function useDeleteGame() {
+  const queryClient = useQueryClient();
+  return useMutation(
+    (gameId: string) => gamesApi.delete(gameId),
     { onSuccess: () => queryClient.invalidateQueries('games') }
   );
 }

@@ -17,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Update="Data\map2950_initial.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\MEPBMmanager.Domain\MEPBMmanager.Domain.csproj" />
     <ProjectReference Include="..\MEPBMmanager.Infrastructure\MEPBMmanager.Infrastructure.csproj" />
   </ItemGroup>

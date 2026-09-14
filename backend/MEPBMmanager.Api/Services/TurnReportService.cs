@@ -231,7 +231,10 @@ public class TurnReportService
     private static string FormatArmies(System.Collections.Generic.ICollection<MEPBMmanager.Domain.Entities.Army> armies)
     {
         if (!armies.Any()) return "None";
-        return string.Join("; ", armies.Select(a => a.Name + ": HC=" + a.HeavyCavalry + " LC=" + a.LightCavalry + " HI=" + a.HeavyInfantry + " LI=" + a.LightInfantry + " Arch=" + a.Archers + " MAA=" + a.MenAtArms + " Morale=" + a.Morale + " WR=" + a.WeaponRank + " AR=" + a.ArmourRank));
+        return string.Join("; ", armies.Select(a =>
+            a.Name + ": HC=" + a.HeavyCavalry + " LC=" + a.LightCavalry + " HI=" + a.HeavyInfantry + " LI=" + a.LightInfantry + " Arch=" + a.Archers + " MAA=" + a.MenAtArms + " Morale=" + a.Morale +
+            " WR[HC=" + a.HCWeaponRank + "/LC=" + a.LCWeaponRank + "/HI=" + a.HIWeaponRank + "/LI=" + a.LIWeaponRank + "/A=" + a.ArcherWeaponRank + "/M=" + a.MAAWeaponRank + "]" +
+            " AR[HC=" + a.HCArmourRank + "/LC=" + a.LCArmourRank + "/HI=" + a.HIArmourRank + "/LI=" + a.LIArmourRank + "/A=" + a.ArcherArmourRank + "/M=" + a.MAAArmourRank + "]"));
     }
 
     private static List<Dictionary<string, JsonElement>> ParseResults(string content)

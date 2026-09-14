@@ -27,18 +27,40 @@ public class NationTemplate
     public int StartingLightInfantry { get; set; }
     public int StartingArchers { get; set; }
     public int StartingMenAtArms { get; set; }
-    public int StartingWeaponRank { get; set; }
-    public int StartingArmourRank { get; set; }
     public int StartingMorale { get; set; } = 30;
     public int StartingTraining { get; set; } = 10;
+
+    // ── Calidad de armas/armaduras por tropa ──
+    public int HCWeaponRank { get; set; }
+    public int HCArmourRank { get; set; }
+    public int LCWeaponRank { get; set; }
+    public int LCArmourRank { get; set; }
+    public int HIWeaponRank { get; set; }
+    public int HIArmourRank { get; set; }
+    public int LIWeaponRank { get; set; }
+    public int LIArmourRank { get; set; }
+    public int ArcherWeaponRank { get; set; }
+    public int ArcherArmourRank { get; set; }
+    public int MAAWeaponRank { get; set; }
+    public int MAAArmourRank { get; set; }
 
     // ── Poblaciones iniciales ──
     public string CapitalName { get; set; } = "Capital";
     public string CapitalSize { get; set; } = "town";
+    public string CapitalFortification { get; set; } = "";
     public bool CapitalHasHarbour { get; set; }
     public bool CapitalHasPort { get; set; }
     public string BorderTownName { get; set; } = "Border Town";
     public string BorderTownSize { get; set; } = "village";
+    public string BorderTownFortification { get; set; } = "";
+
+    // ── Nombres de personajes iniciales ──
+    public string Character1Name { get; set; } = "Ruler";
+    public string Character2Name { get; set; } = "Commander";
+    public string Character3Name { get; set; } = "Marshal";
+    public string Character4Name { get; set; } = "Spymaster";
+    public string Character5Name { get; set; } = "Emissary";
+    public string Character6Name { get; set; } = "Sage";
 
     // ── Reglas de alianza / admin ──
     public bool RequiresAdmin { get; set; }          // esta nación SIEMPRE debe tener un admin de alianza

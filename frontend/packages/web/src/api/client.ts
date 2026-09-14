@@ -34,11 +34,16 @@ export const authApi = {
   me: () => api.get('/auth/me'),
 };
 
+export const usersApi = {
+  list: () => api.get('/users'),
+};
+
 export const gamesApi = {
   list: () => api.get('/games'),
   get: (id: string) => api.get(`/games/${id}`),
-  create: (data: { name: string; gameTypeCode?: string }) =>
+  create: (data: { name: string; gameTypeCode?: string; playerEmails?: string[]; adminEmails?: string[] }) =>
     api.post('/games', data),
+  delete: (gameId: string) => api.delete(`/games/${gameId}`),
   join: (gameId: string, nationId?: string) =>
     api.post(`/games/${gameId}/join`, { nationId }),
   getNations: (gameId: string) =>
@@ -47,8 +52,24 @@ export const gamesApi = {
     api.post(`/games/${gameId}/start`),
   processTurn: (gameId: string) =>
     api.post(`/games/${gameId}/process-turn`),
-  getState: (gameId: string) =>
-    api.get(`/games/${gameId}/state`),
+  getState: (gameId: string, nationId?: string) =>
+    api.get(`/games/${gameId}/state`, { params: nationId ? { nationId } : undefined }),
+  updateNation: (gameId: string, nationId: string) =>
+    api.put(`/games/${gameId}/nation`, { nationId }),
+  setRelation: (gameId: string, nationId: string, targetNationId: string, level: number) =>
+    api.put(`/games/${gameId}/relations`, { nationId, targetNationId, level }),
+  accept: (gameId: string, wantsToPlayWithUserId?: string) =>
+    api.post(`/games/${gameId}/accept`, { wantsToPlayWithUserId }),
+  getPlayers: (gameId: string) =>
+    api.get(`/games/${gameId}/players`),
+  getAdmins: (gameId: string) =>
+    api.get(`/games/${gameId}/admins`),
+  acceptAdmin: (gameId: string) =>
+    api.post(`/games/${gameId}/accept-admin`),
+  addPlayer: (gameId: string, email: string, isAdmin = false) =>
+    api.post(`/games/${gameId}/players`, { email, isAdmin }),
+  removePlayer: (gameId: string, playerId: string) =>
+    api.delete(`/games/${gameId}/players/${playerId}`),
 };
 
 export const ordersApi = {

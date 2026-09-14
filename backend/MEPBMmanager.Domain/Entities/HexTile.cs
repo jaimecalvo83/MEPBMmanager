@@ -10,6 +10,10 @@ public class HexTile
     public int R { get; set; }
     public string Terrain { get; set; } = "plains";
     public bool HasBridge { get; set; } = false;
+    public bool HasFord { get; set; } = false;
+    public bool HasMajorRiver { get; set; } = false;
+    public bool HasMinorRiver { get; set; } = false;
+    public bool HasRoad { get; set; } = false;
     public string? OwnerId { get; set; }
     public string? GameTypeId { get; set; }
 

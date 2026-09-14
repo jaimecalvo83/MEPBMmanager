@@ -42,30 +42,33 @@ public class AuthController : ControllerBase
         if (usernameExists)
             return Conflict(new { error = "Username already taken" });
 
+        var defaultRole = await _db.Roles.FirstOrDefaultAsync(r => r.Id == "game_user");
+
         var user = new User
         {
             Id = Guid.NewGuid().ToString(),
             Email = request.Email,
             Username = request.Username,
-            Password = BCrypt.Net.BCrypt.HashPassword(request.Password)
+            Password = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            RoleId = defaultRole?.Id ?? "game_user"
         };
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
         var token = GenerateToken(user);
-        return Ok(new { token, user = new { user.Id, user.Email, user.Username } });
+        return Ok(new { token, user = new { user.Id, user.Email, user.Username, user.RoleId } });
     }
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+        var user = await _db.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Email == request.Email);
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.Password))
             return Unauthorized(new { error = "Invalid credentials" });
 
         var token = GenerateToken(user);
-        return Ok(new { token, user = new { user.Id, user.Email, user.Username } });
+        return Ok(new { token, user = new { user.Id, user.Email, user.Username, user.RoleId, role = user.Role?.Name } });
     }
 
     [HttpGet("me")]
@@ -73,11 +76,11 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Me()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var user = await _db.Users.FindAsync(userId);
+        var user = await _db.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null)
             return NotFound(new { error = "User not found" });
 
-        return Ok(new { user = new { user.Id, user.Email, user.Username } });
+        return Ok(new { user = new { user.Id, user.Email, user.Username, user.RoleId, role = user.Role?.Name } });
     }
 
     private string GenerateToken(User user)
@@ -89,7 +92,8 @@ public class AuthController : ControllerBase
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id),
             new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Name, user.Username)
+            new Claim(ClaimTypes.Name, user.Username),
+            new Claim(ClaimTypes.Role, user.RoleId)
         };
 
         var expirationInDays = _config.GetValue<int>("Jwt:ExpirationInDays", 7);

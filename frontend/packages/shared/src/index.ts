@@ -9,3 +9,4 @@ export * from './constants/orders';
 export * from './constants/troops';
 export * from './constants/spells';
 export * from './constants/nations';
+export * from './constants/map2950_features';

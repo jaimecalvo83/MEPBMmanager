@@ -2,9 +2,9 @@ import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { gamesApi } from '../api/client';
 import type { GameState } from '../types';
 
-export function useGameState(gameId: string) {
-  return useQuery<GameState>(['game', gameId], async () => {
-    const { data } = await gamesApi.getState(gameId);
+export function useGameState(gameId: string, nationId?: string) {
+  return useQuery<GameState>(['game', gameId, nationId ?? 'default'], async () => {
+    const { data } = await gamesApi.getState(gameId, nationId);
     return data;
   }, { retry: false });
 }

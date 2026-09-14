@@ -8,6 +8,7 @@ public class MepbmDbContext : DbContext
     public MepbmDbContext(DbContextOptions<MepbmDbContext> options) : base(options) { }
 
     public DbSet<User> Users => Set<User>();
+    public DbSet<Role> Roles => Set<Role>();
     public DbSet<Game> Games => Set<Game>();
     public DbSet<Player> Players => Set<Player>();
     public DbSet<Turn> Turns => Set<Turn>();
@@ -30,10 +31,18 @@ public class MepbmDbContext : DbContext
     public DbSet<GameType> GameTypes => Set<GameType>();
     public DbSet<NationTemplate> NationTemplates => Set<NationTemplate>();
     public DbSet<Encounter> Encounters => Set<Encounter>();
+    public DbSet<GameAdmin> GameAdmins => Set<GameAdmin>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Role
+        modelBuilder.Entity<Role>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.HasIndex(r => r.Name).IsUnique();
+        });
 
         // User
         modelBuilder.Entity<User>(e =>
@@ -41,6 +50,7 @@ public class MepbmDbContext : DbContext
             e.HasKey(u => u.Id);
             e.HasIndex(u => u.Email).IsUnique();
             e.HasIndex(u => u.Username).IsUnique();
+            e.HasOne(u => u.Role).WithMany(r => r.Users).HasForeignKey(u => u.RoleId);
         });
 
         // Game
@@ -58,6 +68,7 @@ public class MepbmDbContext : DbContext
             e.HasOne(p => p.User).WithMany(u => u.Players).HasForeignKey(p => p.UserId);
             e.HasOne(p => p.Game).WithMany(g => g.Players).HasForeignKey(p => p.GameId);
             e.HasOne(p => p.Nation).WithMany(n => n.Players).HasForeignKey(p => p.NationId);
+            e.HasOne(p => p.WantsToPlayWith).WithMany().HasForeignKey(p => p.WantsToPlayWithUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // Turn
@@ -118,6 +129,10 @@ public class MepbmDbContext : DbContext
         {
             e.HasKey(h => h.Id);
             e.Property(h => h.HasBridge).HasDefaultValue(false);
+            e.Property(h => h.HasFord).HasDefaultValue(false);
+            e.Property(h => h.HasMajorRiver).HasDefaultValue(false);
+            e.Property(h => h.HasMinorRiver).HasDefaultValue(false);
+            e.Property(h => h.HasRoad).HasDefaultValue(false);
             e.HasIndex(h => new { h.GameId, h.Q, h.R }).IsUnique();
             e.HasOne(h => h.Game).WithMany(g => g.HexTiles).HasForeignKey(h => h.GameId);
             e.HasOne(h => h.GameType).WithMany(gt => gt.HexTiles).HasForeignKey(h => h.GameTypeId);
@@ -216,6 +231,15 @@ public class MepbmDbContext : DbContext
             e.HasOne(en => en.Game).WithMany(g => g.Encounters).HasForeignKey(en => en.GameId);
             e.HasOne(en => en.Character).WithMany(c => c.Encounters).HasForeignKey(en => en.CharacterId);
             e.HasOne(en => en.Army).WithMany(a => a.Encounters).HasForeignKey(en => en.ArmyId);
+        });
+
+        // GameAdmin
+        modelBuilder.Entity<GameAdmin>(e =>
+        {
+            e.HasKey(ga => ga.Id);
+            e.HasIndex(ga => new { ga.GameId, ga.UserId }).IsUnique();
+            e.HasOne(ga => ga.Game).WithMany(g => g.GameAdmins).HasForeignKey(ga => ga.GameId);
+            e.HasOne(ga => ga.User).WithMany().HasForeignKey(ga => ga.UserId);
         });
     }
 }

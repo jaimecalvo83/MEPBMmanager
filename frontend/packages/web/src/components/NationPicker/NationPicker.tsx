@@ -5,11 +5,12 @@ import { gamesApi } from '../../api/client';
 
 interface NationPickerProps {
   gameId: string;
+  mode?: 'join' | 'update';
   onClose: () => void;
   onJoined: () => void;
 }
 
-const NationPicker: React.FC<NationPickerProps> = ({ gameId, onClose, onJoined }) => {
+const NationPicker: React.FC<NationPickerProps> = ({ gameId, mode = 'join', onClose, onJoined }) => {
   const { data: nations, isLoading } = useNations(gameId);
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
@@ -23,7 +24,11 @@ const NationPicker: React.FC<NationPickerProps> = ({ gameId, onClose, onJoined }
     setJoining(true);
     setError(null);
     try {
-      await gamesApi.join(gameId, selected);
+      if (mode === 'update') {
+        await gamesApi.updateNation(gameId, selected);
+      } else {
+        await gamesApi.join(gameId, selected);
+      }
       await queryClient.invalidateQueries(['game', gameId]);
       onJoined();
     } catch (err: unknown) {
@@ -37,7 +42,9 @@ const NationPicker: React.FC<NationPickerProps> = ({ gameId, onClose, onJoined }
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg border border-gray-700">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-mepbm-gold">Choose Your Nation</h2>
+          <h2 className="text-xl font-bold text-mepbm-gold">
+            {mode === 'update' ? 'Select Your Nation' : 'Choose Your Nation'}
+          </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">
             &times;
           </button>
@@ -84,7 +91,7 @@ const NationPicker: React.FC<NationPickerProps> = ({ gameId, onClose, onJoined }
             disabled={!selected || joining}
             className="flex-1 px-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-500 transition disabled:opacity-50"
           >
-            {joining ? 'Joining...' : 'Join Game'}
+            {joining ? 'Joining...' : mode === 'update' ? 'Select Nation' : 'Join Game'}
           </button>
           <button
             onClick={onClose}

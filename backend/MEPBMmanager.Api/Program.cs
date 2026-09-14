@@ -24,6 +24,7 @@ builder.Services.AddAuthentication(options =>
 {
     options.RequireHttpsMetadata = false;
     options.SaveToken = true;
+    options.MapInboundClaims = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
@@ -57,10 +58,32 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
+for (int attempt = 1; attempt <= 10; attempt++)
 {
-    var db = scope.ServiceProvider.GetRequiredService<MepbmDbContext>();
-    await DbInitializer.SeedAsync(db);
+    try
+    {
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MepbmDbContext>();
+            await db.Database.MigrateAsync();
+            
+            var gameTypeCount = await db.GameTypes.CountAsync();
+            Console.WriteLine($"GameTypes in DB: {gameTypeCount}");
+            
+            await DbInitializer.SeedAsync(db);
+            Console.WriteLine("Seed completed successfully");
+            
+            var ntCount = await db.NationTemplates.CountAsync();
+            Console.WriteLine($"NationTemplates in DB: {ntCount}");
+        }
+        break;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"DB init attempt {attempt} failed: {ex.InnerException?.Message ?? ex.Message}");
+        if (attempt == 10) throw;
+        await Task.Delay(3000);
+    }
 }
 
 if (app.Environment.IsDevelopment())
