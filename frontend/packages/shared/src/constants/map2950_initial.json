@@ -1,7 +1,7 @@
 {
   "metadata": {
     "module": "Third Age 2950",
-    "source": "wiki.mepbm.com/2950 + Game 299 Turn 0 PDFs (woodmen, northmen, riders-of-rohan, dunadan-rangers, silvan-elves, northern-gondor, southern-gondor, dwarves, sinda-elves, noldo-elves, witch-king, dragon-lord), fire-king, long-rider, dark-lieutenants, quiet-avenger, white-wizard, corsairs, rhun-easterlings, dunlendings, dog-lord, cloud-lord, blind-sorcerer, ice-king (Game 299 Turn 0 full: stats+spells+artifacts+armies)",
+    "source": "wiki.mepbm.com/2950 + Game 299 Turn 0 PDFs (woodmen, northmen, riders-of-rohan, dunadan-rangers, silvan-elves, northern-gondor, southern-gondor, dwarves, sinda-elves, noldo-elves, witch-king, dragon-lord), fire-king, long-rider, dark-lieutenants, quiet-avenger, white-wizard, corsairs, rhun-easterlings, dunlendings, dog-lord, cloud-lord, blind-sorcerer, ice-king, khand-easterlings (Game 299 Turn 0 full: stats+spells+artifacts+armies)",
     "hexIdFormat": "CCCCRRRR -> col 01-44 + row 01-39, ej 2711 = col 27 row 11",
     "coordinates": "hexId (clasica) + q (=col) + r (=row). Compatible backend HexTile: Q=q, R=r, Terrain, OwnerId=nationSlug",
     "terrainStatus": "DIGITIZED_FROM_IMAGE by script digitize_map_2950_auto.py. Lattice: px=56, py=52, origen=(50.6,72.6), filas pares +28px. Muestreo: mayoria por disco r~11px excluyendo negro; hex con centro azul -> coastal. Hexes costeros/lagos pequenos/rios pueden requerir retoques manuales.",
@@ -30205,7 +30205,7 @@
       "mage": 0,
       "stealth": 0,
       "challenge": 21,
-      "hex": "41,33"
+      "hex": "43,24"
     },
     {
       "nation": "khand-easterlings",
@@ -30217,7 +30217,17 @@
       "mage": 30,
       "stealth": 0,
       "challenge": 30,
-      "hex": "41,33"
+      "hex": "41,33",
+      "spells": [
+        108,
+        212,
+        302
+      ],
+      "spellRanks": {
+        "108": 50,
+        "212": 72,
+        "302": 100
+      }
     },
     {
       "nation": "khand-easterlings",
@@ -30229,7 +30239,19 @@
       "mage": 40,
       "stealth": 0,
       "challenge": 41,
-      "hex": "41,33"
+      "hex": "35,38",
+      "spells": [
+        108,
+        216,
+        308,
+        415
+      ],
+      "spellRanks": {
+        "108": 58,
+        "216": 93,
+        "308": 63,
+        "415": 90
+      }
     },
     {
       "nation": "khand-easterlings",
@@ -30241,7 +30263,8 @@
       "mage": 0,
       "stealth": 0,
       "challenge": 30,
-      "hex": "41,33"
+      "hex": "42,28",
+      "commands": "42,28"
     },
     {
       "nation": "khand-easterlings",
@@ -30253,7 +30276,8 @@
       "mage": 0,
       "stealth": 0,
       "challenge": 22,
-      "hex": "41,33"
+      "hex": "44,30",
+      "commands": "44,30"
     },
     {
       "nation": "khand-easterlings",
@@ -30266,7 +30290,6 @@
       "stealth": 0,
       "challenge": 75,
       "hex": "41,33",
-      "commands": "41,33",
       "artifacts": [
         76,
         146
@@ -30282,7 +30305,17 @@
       "mage": 30,
       "stealth": 0,
       "challenge": 32,
-      "hex": "41,33"
+      "hex": "43,35",
+      "spells": [
+        106,
+        210,
+        302
+      ],
+      "spellRanks": {
+        "106": 56,
+        "210": 70,
+        "302": 78
+      }
     },
     {
       "nation": "khand-easterlings",
@@ -30294,7 +30327,8 @@
       "mage": 0,
       "stealth": 0,
       "challenge": 22,
-      "hex": "41,33"
+      "hex": "41,33",
+      "commands": "41,33"
     },
     {
       "nation": "rhun-easterlings",
@@ -30865,15 +30899,15 @@
     },
     "khand-easterlings": {
       "gold": 20000,
-      "food": 10500,
-      "timber": 300,
-      "leather": 800,
-      "bronze": 300,
-      "steel": 50,
+      "food": 9841,
+      "timber": 384,
+      "leather": 1267,
+      "bronze": 0,
+      "steel": 85,
       "mithril": 0,
-      "mounts": 150,
+      "mounts": 120,
       "taxRate": 40,
-      "victoryPoints": 550,
+      "victoryPoints": 575,
       "warshipStrength": 3
     }
   },
