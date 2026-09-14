@@ -404,12 +404,21 @@ public class CombatResolver
     private static int WarshipStrength(string nationName)
         => WarshipStrengthByNation.TryGetValue((nationName ?? "").ToLower(), out var s) ? s : 3;
 
+    // Fuerza naval de la nación: campo persistido (módulo 2950) o tabla por nombre.
+    private static int WarshipStrengthFor(string? nationId, string nationName, Game game)
+    {
+        var nation = game.Nations.FirstOrDefault(n => n.Id == nationId);
+        if (nation != null && nation.WarshipStrength > 0)
+            return nation.WarshipStrength;
+        return WarshipStrength(nationName);
+    }
+
     private static int NavyConstitution(Navy navy)
         => 3 * (navy.Warships + navy.Transports);
 
     private int NavyStrength(Navy navy, string? opponentNationId, Game game, string? tactic, string? oppTactic)
     {
-        int ws = WarshipStrength(game.Nations.FirstOrDefault(n => n.Id == navy.NationId)?.Name ?? "");
+        int ws = WarshipStrengthFor(navy.NationId, game.Nations.FirstOrDefault(n => n.Id == navy.NationId)?.Name ?? "", game);
         int baseStr = navy.Warships * ws + navy.Transports * 1;
         int cmd = CommanderChallengeRankNavy(navy, game);
         int modPct = (cmd + 100 + 100) / 8; // cmd + clima(100) + terreno nación(100); artefactos/hechizos pendientes

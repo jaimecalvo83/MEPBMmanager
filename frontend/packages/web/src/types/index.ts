@@ -55,6 +55,8 @@ export interface GameState {
     taxRate: number;
     allegiance: string;
     color: string;
+    victoryPoints: number;
+    warshipStrength: number;
     abilities?: Array<{
       id: string;
       name: string;
@@ -68,12 +70,15 @@ export interface GameState {
     gold: number;
     food: number;
     taxRate: number;
+    victoryPoints: number;
   }>;
   allNations: Array<{
     id: string;
     name: string;
     allegiance: string;
     color: string;
+    victoryPoints: number;
+    isEliminated: boolean;
   }>;
   relations: Array<{
     id: string;

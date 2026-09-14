@@ -1283,7 +1283,9 @@ public class GamesController : ControllerBase
                 n.Bronze,
                 n.Steel,
                 n.Mithril,
-                n.Mounts
+                n.Mounts,
+                n.VictoryPoints,
+                n.WarshipStrength
             })
             .ToListAsync();
 
@@ -1301,7 +1303,7 @@ public class GamesController : ControllerBase
         var allNations = await _db.Nations
             .Where(n => n.GameId == id)
             .OrderBy(n => n.Name)
-            .Select(n => new { n.Id, n.Name, n.Allegiance, n.Color })
+            .Select(n => new { n.Id, n.Name, n.Allegiance, n.Color, n.VictoryPoints, n.IsEliminated })
             .ToListAsync();
 
         return Ok(new
@@ -1323,6 +1325,8 @@ public class GamesController : ControllerBase
                 activeNation.Steel,
                 activeNation.Mithril,
                 activeNation.Mounts,
+                activeNation.VictoryPoints,
+                activeNation.WarshipStrength,
                 abilities
             },
             nations = visibleNations,
@@ -1470,7 +1474,9 @@ public class GamesController : ControllerBase
                 Steel = st?.Steel ?? 200,
                 Mithril = st?.Mithril ?? 50,
                 Mounts = st?.Mounts ?? 300,
-                TaxRate = st?.TaxRate ?? 40
+                TaxRate = st?.TaxRate ?? 40,
+                VictoryPoints = st?.VictoryPoints ?? 0,
+                WarshipStrength = st?.WarshipStrength ?? 3
             };
             _db.Nations.Add(nation);
             nationsBySlug[meta.Slug] = nation;
@@ -1583,7 +1589,7 @@ public class GamesController : ControllerBase
                     Warships = a.Warships,
                     Transports = a.Transports,
                     LocationHex = $"{a.Q},{a.R}",
-                    Strength = 0
+                    Strength = nation.WarshipStrength
                 });
             }
         }

@@ -21,6 +21,8 @@ public class Nation
     public int Mithril { get; set; } = 0;
     public int Mounts { get; set; } = 500;
     public int TaxRate { get; set; } = 30;
+    public int VictoryPoints { get; set; } = 0;
+    public int WarshipStrength { get; set; } = 3;
     
     public Game Game { get; set; } = null!;
     public ICollection<Player> Players { get; set; } = new List<Player>();
