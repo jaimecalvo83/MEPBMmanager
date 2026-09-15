@@ -1172,6 +1172,11 @@ public class TurnProcessor
     public static (int Buy, int Sell) MarketRate(string product) =>
         MarketPrice.TryGetValue((product ?? "").ToLower(), out var p) ? p : (0, 0);
 
+    public static int MarketBuyPoolFor(string product) =>
+        MarketBuyPool.TryGetValue((product ?? "").ToLower(), out var v) ? v : 0;
+
+    public static int MarketSellCapGold() => MarketSellCap;
+
     public static IReadOnlyList<string> MarketProductList() => MarketProducts;
 
     public static bool IsMarketProductName(string? p, out string canon) => IsMarketProduct(p, out canon);

@@ -66,6 +66,7 @@ export interface OrderFieldSpec {
 export interface OrderEstimate {
   ok: boolean;
   errors: string[];
+  warnings: string[];
   costs: Record<string, number>;
   maxAmount: number | null;
   expectedGold: number | null;

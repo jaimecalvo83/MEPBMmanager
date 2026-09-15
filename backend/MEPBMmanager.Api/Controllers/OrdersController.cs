@@ -336,9 +336,13 @@ public class OrdersController : ControllerBase
         var ctx = new EstimateCtx(game, nation, ch, army, navy, effLoc, pars);
         var requires = RequiresFor(req.Code, ctx);
         var errors = ValidateEstimateParams(req.Code, ctx, requires);
-        var costs = EstimateCosts(req.Code, ctx, out var maxAmount, out var expectedGold);
+        var pending = await PendingNationOrders(gameId, nation.Id);
+        var used = SummarizePendingUsage(pending, nation, game);
+        var costs = EstimateCosts(req.Code, ctx, out var maxAmount, out var expectedGold, used);
         if (maxAmount == 0)
             errors.Add("Insufficient resources or capacity to execute (max 0)");
+        var warnings = new List<string>();
+        CrossOrderConflicts(req.Code, ctx, pending, used, errors, warnings);
 
         object? suggestNames = null;
         if (req.Code is 552 or 555)
@@ -348,6 +352,7 @@ public class OrdersController : ControllerBase
         {
             ok = errors.Count == 0,
             errors,
+            warnings,
             costs,
             maxAmount,
             expectedGold,
@@ -512,7 +517,9 @@ public class OrdersController : ControllerBase
             792 or 796 => new() { Sel("artifactId", "Artifact", heldArts) },
             810 or 820 or 830 or 850 or 860 or 870 => new() { Txt("destination", "Destination hex"), Flag("evasive", "Evasive") },
             825 => new() { Sel("spellId", "Spell", SpellOpts(SpellType.Movement)), Txt("destination", "Destination hex") },
-            310 or 315 or 320 or 325 => new() { Sel("product", "Product", ProductOptions), Num("amount", "Amount", min: 1) },
+            310 => new() { Sel("product", "Product", ProductOptions), Num("amount", "Amount", min: 1), Num("price", "Bid price (empty = market)", req: false, min: 1) },
+            315 or 320 => new() { Sel("product", "Product", ProductOptions), Num("amount", "Amount", min: 1) },
+            325 => new() { Sel("product", "Product", ProductOptions), Num("percentage", "Percentage of stock", min: 1, max: 100) },
             947 or 948 => new() { Sel("resource", "Resource", ProductOptions), Num("amount", "Amount", min: 1) },
             _ => new List<OrderFieldSpecDto>()
         };
@@ -666,7 +673,171 @@ public class OrdersController : ControllerBase
         return errors;
     }
 
-    private object EstimateCosts(int code, EstimateCtx ctx, out int? maxAmount, out int? expectedGold)
+    private sealed class PendingUsage
+    {
+        public Dictionary<string, int> RecruitsByPc = new();
+        public Dictionary<string, int> BuyByProduct = new();
+        public int SellGoldUsed;
+        public HashSet<string> FortifiedPcs = new();
+        public HashSet<string> DoubleAgentNations = new();
+        public HashSet<string> ChallengedTargets = new();
+        public HashSet<string> BribedTargets = new();
+        public HashSet<string> MovedArtifacts = new();
+    }
+
+    private static Dictionary<string, System.Text.Json.JsonElement> ParseStoredParams(string? json)
+    {
+        var d = new Dictionary<string, System.Text.Json.JsonElement>();
+        if (string.IsNullOrWhiteSpace(json)) return d;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                foreach (var p in doc.RootElement.EnumerateObject()) d[p.Name] = p.Value.Clone();
+        }
+        catch { }
+        return d;
+    }
+
+    private async Task<List<Order>> PendingNationOrders(string gameId, string nationId)
+    {
+        var turn = await _db.Turns
+            .Where(t => t.GameId == gameId && t.Status == "orders_open")
+            .OrderByDescending(t => t.Number)
+            .FirstOrDefaultAsync();
+        if (turn == null) return new List<Order>();
+        return await _db.Orders
+            .Where(o => o.GameId == gameId && o.TurnId == turn.Id && o.NationId == nationId && o.Status == "pending")
+            .ToListAsync();
+    }
+
+    private PendingUsage SummarizePendingUsage(List<Order> pending, Nation nation, Game game)
+    {
+        var used = new PendingUsage();
+        var chars = game.Nations.SelectMany(n => n.Characters).ToDictionary(c => c.Id);
+        foreach (var o in pending)
+        {
+            var p = ParseStoredParams(o.Parameters);
+            int Amt(string k, int def = 0)
+            {
+                if (p.TryGetValue(k, out var el) && el.ValueKind == System.Text.Json.JsonValueKind.Number && el.TryGetInt32(out var n2)) return n2;
+                return def;
+            }
+            string? Str(string k) => p.TryGetValue(k, out var el) && el.ValueKind == System.Text.Json.JsonValueKind.String ? el.GetString() : null;
+            if (o.Code is >= 400 and <= 420)
+            {
+                var amount = Amt("amount");
+                if (amount <= 0) continue;
+                chars.TryGetValue(o.CharacterId, out var chx);
+                var ax = o.ArmyId != null ? nation.Armies.FirstOrDefault(a => a.Id == o.ArmyId)
+                    : chx?.ArmyId != null ? nation.Armies.FirstOrDefault(a => a.Id == chx.ArmyId)
+                    : nation.Armies.FirstOrDefault();
+                var pc = ax == null ? null : nation.PopulationCentres.FirstOrDefault(x => x.LocationHex == ax.LocationHex);
+                if (pc != null) used.RecruitsByPc[pc.Id] = used.RecruitsByPc.GetValueOrDefault(pc.Id) + amount;
+            }
+            else if (o.Code is 310 or 315)
+            {
+                var prod = (Str("product") ?? "").ToLower();
+                if (prod != "") used.BuyByProduct[prod] = used.BuyByProduct.GetValueOrDefault(prod) + Amt("amount");
+            }
+            else if (o.Code is 320)
+            {
+                var prod = (Str("product") ?? "").ToLower();
+                if (TurnProcessor.IsMarketProductName(prod, out _) && Amt("amount") > 0)
+                {
+                    var (_, baseSell) = TurnProcessor.MarketRate(prod);
+                    used.SellGoldUsed += Amt("amount") * NationAbilities.MarketSellPrice(nation.Name, baseSell);
+                }
+            }
+            else if (o.Code is 325)
+            {
+                var prod = (Str("product") ?? "").ToLower();
+                if (TurnProcessor.IsMarketProductName(prod, out _))
+                {
+                    var (_, baseSellAll) = TurnProcessor.MarketRate(prod);
+                    var sell = NationAbilities.MarketSellPrice(nation.Name, baseSellAll);
+                    var pct = Amt("percentage", 100);
+                    var stock = StockOfLocal(nation, prod);
+                    used.SellGoldUsed += stock * pct / 100 * sell;
+                }
+            }
+            else if (o.Code == 494)
+            {
+                var pc = Str("pcId") != null
+                    ? nation.PopulationCentres.FirstOrDefault(x => x.Id == Str("pcId"))
+                    : nation.PopulationCentres.FirstOrDefault(x => x.LocationHex == (Str("hex") ?? chars.GetValueOrDefault(o.CharacterId)?.LocationHex));
+                if (pc != null) used.FortifiedPcs.Add(pc.Id);
+            }
+            else if (o.Code == 500 && Str("targetNationId") is { } tn) used.DoubleAgentNations.Add(tn);
+            else if (o.Code == 210 && Str("targetId") is { } tg) used.ChallengedTargets.Add(tg);
+            else if (o.Code == 505 && Str("targetId") is { } tb) used.BribedTargets.Add(tb);
+            else if ((o.Code == 360 || o.Code == 792) && Str("artifactId") is { } ar) used.MovedArtifacts.Add(ar);
+        }
+        return used;
+    }
+
+    private static int StockOfLocal(Nation n, string p) => p switch
+    {
+        "timber" => n.Timber, "leather" => n.Leather, "bronze" => n.Bronze,
+        "steel" => n.Steel, "mithril" => n.Mithril, "mounts" => n.Mounts, "food" => n.Food, _ => 0
+    };
+
+    private void CrossOrderConflicts(int code, EstimateCtx ctx, List<Order> pending,
+        PendingUsage used, List<string> errors, List<string> warnings)
+    {
+        var pars = ctx.Pars;
+        string? Str(string k) => ParamStr(pars, k);
+        if (code == 494)
+        {
+            var pc = Str("pcId") != null
+                ? ctx.Nation.PopulationCentres.FirstOrDefault(p => p.Id == Str("pcId"))
+                : ctx.Nation.PopulationCentres.FirstOrDefault(p => p.LocationHex == (Str("hex") ?? ctx.EffLoc));
+            if (pc != null && used.FortifiedPcs.Contains(pc.Id))
+                errors.Add($"{pc.Name} is already fortified by another order this turn");
+        }
+        if (code == 500 && Str("targetNationId") is { } tn && used.DoubleAgentNations.Contains(tn))
+            errors.Add("Another order already recruits a double agent there");
+        if (code == 210 && Str("targetId") is { } tg && used.ChallengedTargets.Contains(tg))
+        {
+            var otherMax = 0;
+            foreach (var o in pending.Where(o => o.Code == 210))
+            {
+                var pp = ParseStoredParams(o.Parameters);
+                if (pp.TryGetValue("targetId", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.String && t.GetString() == tg)
+                {
+                    var oc = ctx.Game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == o.CharacterId);
+                    if (oc != null) otherMax = Math.Max(otherMax, oc.ChallengeRank);
+                }
+            }
+            if (ctx.Ch.ChallengeRank < otherMax)
+                errors.Add($"Target already challenged by higher challenge rank ({otherMax} vs yours {ctx.Ch.ChallengeRank})");
+            else
+                warnings.Add("Target already challenged by another character (only the highest CR fights)");
+        }
+        if (code == 505 && Str("targetId") is { } tb && used.BribedTargets.Contains(tb))
+            warnings.Add("Target already bribed by another character (first attempt decides)");
+        if ((code == 360 || code == 792) && ParamStr(pars, "artifactId") is { } ar && used.MovedArtifacts.Contains(ar))
+            warnings.Add("Artifact already moved by another pending order");
+        if ((code is 320 or 325) && used.SellGoldUsed > 0)
+            warnings.Add($"{used.SellGoldUsed} gold of sell cap already used by other orders");
+        if (code is 400 or 404 or 408 or 412 or 416 or 420)
+        {
+            var army = ParamStr(pars, "armyId") != null
+                ? ctx.Nation.Armies.FirstOrDefault(a => a.Id == ParamStr(pars, "armyId"))
+                : ctx.Nation.Armies.FirstOrDefault(a => a.Id == ctx.Ch.ArmyId) ?? ctx.Nation.Armies.FirstOrDefault();
+            var pc = army == null ? null : ctx.Nation.PopulationCentres.FirstOrDefault(p => p.LocationHex == army.LocationHex);
+            if (pc != null)
+            {
+                var left = TurnProcessor.RecruitCapacity(pc.Size) - used.RecruitsByPc.GetValueOrDefault(pc.Id);
+                var want = ParamInt(pars, "amount", left);
+                if (want > left)
+                    errors.Add($"Only {Math.Max(0, left)} recruits left at {pc.Name} (other orders use {used.RecruitsByPc.GetValueOrDefault(pc.Id)})");
+            }
+        }
+    }
+
+
+    private object EstimateCosts(int code, EstimateCtx ctx, out int? maxAmount, out int? expectedGold, PendingUsage? used = null)
     {
         maxAmount = null;
         expectedGold = null;
@@ -690,7 +861,7 @@ public class OrdersController : ControllerBase
                 var pc = OwnPc(army.LocationHex);
                 if (pc == null) break;
                 var unit = TurnProcessor.RecruitCostPerUnit[code];
-                var cap = TurnProcessor.RecruitCapacity(pc.Size);
+                var cap = TurnProcessor.RecruitCapacity(pc.Size) - (used?.RecruitsByPc.GetValueOrDefault(pc.Id) ?? 0);
                 var max = Math.Min(cap, n.Gold / unit);
                 if (code is 400 or 404) max = Math.Min(max, n.Mounts);
                 maxAmount = max;
@@ -807,22 +978,43 @@ public class OrdersController : ControllerBase
             case 310 or 315:
             {
                 if (!TurnProcessor.IsMarketProductName(ParamStr(pars, "product"), out var product)) break;
-                var (buy, _) = TurnProcessor.MarketRate(product);
-                var max = n.Gold / Math.Max(1, buy);
+                var (baseBuy, _) = TurnProcessor.MarketRate(product);
+                var buy = code == 310
+                    ? Math.Max(NationAbilities.MarketBuyPrice(n.Name, baseBuy), ParamInt(pars, "price", NationAbilities.MarketBuyPrice(n.Name, baseBuy)))
+                    : NationAbilities.MarketBuyPrice(n.Name, baseBuy);
+                var poolLeft = Math.Max(0, TurnProcessor.MarketBuyPoolFor(product) - (used?.BuyByProduct.GetValueOrDefault(product) ?? 0));
+                var max = Math.Min(n.Gold / Math.Max(1, buy), poolLeft);
                 maxAmount = max;
                 var amount = Math.Min(ParamInt(pars, "amount", max), max);
                 costs["gold"] = amount * buy;
                 break;
             }
-            case 320 or 325:
+            case 320:
             {
                 if (!TurnProcessor.IsMarketProductName(ParamStr(pars, "product"), out var product)) break;
-                var (_, sell) = TurnProcessor.MarketRate(product);
+                var (_, baseSell) = TurnProcessor.MarketRate(product);
+                var sell = NationAbilities.MarketSellPrice(n.Name, baseSell);
                 var stock = StockOf(n, product);
                 maxAmount = stock;
                 var amount = Math.Min(ParamInt(pars, "amount", stock), stock);
                 costs[product] = amount;
-                expectedGold = amount * sell;
+                var remaining = TurnProcessor.MarketSellCapGold() - (used?.SellGoldUsed ?? 0);
+                expectedGold = Math.Max(0, Math.Min(amount * sell, remaining));
+                break;
+            }
+            case 325:
+            {
+                if (!TurnProcessor.IsMarketProductName(ParamStr(pars, "product"), out var product)) break;
+                var (_, baseSellAll) = TurnProcessor.MarketRate(product);
+                var sell = NationAbilities.MarketSellPrice(n.Name, baseSellAll);
+                var stock = StockOf(n, product);
+                maxAmount = stock;
+                var pct = pars.TryGetValue("percentage", out var pe) && pe.ValueKind == System.Text.Json.JsonValueKind.Number
+                    ? Math.Clamp(pe.GetInt32(), 0, 100) : 100;
+                var amount = stock * pct / 100;
+                costs[product] = amount;
+                var remainingAll = TurnProcessor.MarketSellCapGold() - (used?.SellGoldUsed ?? 0);
+                expectedGold = Math.Max(0, Math.Min(amount * sell, remainingAll));
                 break;
             }
         }
