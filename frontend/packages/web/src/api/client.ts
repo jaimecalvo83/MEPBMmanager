@@ -79,6 +79,10 @@ export const ordersApi = {
     api.get(`/games/${gameId}/orders`),
   submit: (gameId: string, data: { characterId: string; code: number; parameters?: Record<string, unknown>; armyId?: string }) =>
     api.post(`/games/${gameId}/orders`, data),
+  eligible: (gameId: string, characterId: string) =>
+    api.get(`/games/${gameId}/orders/eligible`, { params: { characterId } }),
+  estimate: (gameId: string, data: { characterId: string; code: number; parameters?: Record<string, unknown>; armyId?: string; navyId?: string; afterOrder?: { code: number; parameters?: Record<string, unknown> } }) =>
+    api.post(`/games/${gameId}/orders/estimate`, data),
   cancel: (gameId: string, orderId: string) =>
     api.delete(`/games/${gameId}/orders/${orderId}`),
   validate: (gameId: string) =>

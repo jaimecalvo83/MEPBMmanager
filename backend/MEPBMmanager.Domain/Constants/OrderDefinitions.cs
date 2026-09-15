@@ -100,7 +100,7 @@ public static class OrderDefinitions
 
         // EMISSARY SKILL ORDERS
         new(500, "Double", "Recruit Double Agent", ["e"], OrderDifficulty.Average, true, "Recruit a double agent"),
-        new(505, "Bribe", "Bribe/Influence Character", ["e"], OrderDifficulty.Average, true, "Bribe or influence a character"),
+        new(505, "Bribe", "Bribe/Influence Character", ["e"], OrderDifficulty.Average, true, "Bribe a character of a NON-PLAYED nation of your allegiance to recruit it (<21 chars); otherwise a bribed agent for a turn with intel. Min 500 gold, more improves odds"),
         new(520, "InfYour", "Influence Your PC Loyalty", ["e"], OrderDifficulty.Automatic, true, "Influence loyalty of your own population centre"),
         new(525, "InfOthr", "Influence Others PC Loyalty", ["e"], OrderDifficulty.Average, true, "Influence loyalty of another nation population centre"),
         new(530, "Har2Por", "Improve Harbour to Port", ["e"], OrderDifficulty.Easy, false, "Improve a harbour to a port"),

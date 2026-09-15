@@ -343,12 +343,12 @@ public class TurnProcessor
             345 => ProcessTransferFoodToPC(order, parameters),
 
             // â”€â”€ RECLUTAMIENTO â”€â”€
-            400 => ProcessRecruit(order, "HeavyCavalry", 200, parameters),
-            404 => ProcessRecruit(order, "LightCavalry", 120, parameters),
-            408 => ProcessRecruit(order, "HeavyInfantry", 150, parameters),
-            412 => ProcessRecruit(order, "LightInfantry", 80, parameters),
-            416 => ProcessRecruit(order, "Archers", 100, parameters),
-            420 => ProcessRecruit(order, "MenAtArms", 60, parameters),
+            400 => ProcessRecruit(order, "HeavyCavalry", RecruitCostPerUnit[400], parameters),
+            404 => ProcessRecruit(order, "LightCavalry", RecruitCostPerUnit[404], parameters),
+            408 => ProcessRecruit(order, "HeavyInfantry", RecruitCostPerUnit[408], parameters),
+            412 => ProcessRecruit(order, "LightInfantry", RecruitCostPerUnit[412], parameters),
+            416 => ProcessRecruit(order, "Archers", RecruitCostPerUnit[416], parameters),
+            420 => ProcessRecruit(order, "MenAtArms", RecruitCostPerUnit[420], parameters),
 
             // â”€â”€ MOVIMIENTO â”€â”€
             810 => ProcessMoveCharacter(order, parameters, game),
@@ -449,7 +449,7 @@ public class TurnProcessor
 
             // â”€â”€ EMISSARY EXTRA â”€â”€
             500 => ProcessRecruitDoubleAgent(order, parameters),
-            505 => ProcessBribeCharacter(order, parameters),
+            505 => ProcessBribeCharacter(order, parameters, game),
             530 => ProcessImproveHarbour(order, parameters),
             535 => ProcessAddHarbour(order, parameters),
             550 => ProcessImprovePC(order, parameters),
@@ -590,6 +590,51 @@ public class TurnProcessor
 
     private static readonly string[] SizeOrder = { "camp", "village", "town", "major town", "city", "fortress", "citadel" };
 
+    // Tipos de artefacto que cuentan como arma de combate (205). Los tipos
+    // protectores (Armor/Shield/Helm/...) y trinkets no valen para combatir.
+    public static readonly HashSet<string> CombatArtifactTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Sword", "Weapon", "Bow", "Mace", "Scimitar", "Hammer", "Lance",
+        "Club", "Flail", "Axe", "Bola", "Spear"
+    };
+
+    // Rango de arma/armadura por material (370/375). Un solo material por orden.
+    private static readonly Dictionary<string, int> MaterialRank = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "leather", 20 }, { "bronze", 40 }, { "steel", 60 }, { "mithril", 100 }
+    };
+
+    // Nombres de campamento por nación (552/555 cuando no se indica nombre).
+    private static readonly Dictionary<string, string[]> CampNamePools = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "Woodmen", new[] { "Buhr Widu", "Eryn Camp", "Carrock Outpost" } },
+        { "Northmen", new[] { "Dale Camp", "Esgaroth Camp", "Dorwinion Camp" } },
+        { "Riders of Rohan", new[] { "Westfold Camp", "Eastemnet Camp", "Fenmarch Camp" } },
+        { "Dúnadan Rangers", new[] { "Esteldin Camp", "Fornost Camp", "Weather Camp" } },
+        { "Silvan Elves", new[] { "Galabryn Camp", "Eryn Camp", "Celeb Camp" } },
+        { "Northern Gondor", new[] { "Ithilien Camp", "Anorien Camp", "Lossarnach Camp" } },
+        { "Southern Gondor", new[] { "Lebennin Camp", "Belfalas Camp", "Lamedon Camp" } },
+        { "Dwarves", new[] { "Khazad Camp", "Baraz Camp", "Zirak Camp" } },
+        { "Sinda Elves", new[] { "Lothlorien Camp", "Ceryn Camp", "Nimrodel Camp" } },
+        { "Noldo Elves", new[] { "Elost Camp", "Forlindon Camp", "Mithlond Camp" } },
+        { "Witch-king", new[] { "Angmar Camp", "Carn Dum Camp", "Morgul Camp" } },
+        { "Dragon Lord", new[] { "Withered Camp", "Ered Camp", "Guldur Camp" } },
+        { "Dog Lord", new[] { "Nurn Camp", "Morannon Camp", "Udun Camp" } },
+        { "Cloud Lord", new[] { "Ered Lithui Camp", "Nargil Camp", "Mornen Camp" } },
+        { "Blind Sorcerer", new[] { "Nurnen Camp", "Ulgath Camp", "Lugur Camp" } },
+        { "Ice King", new[] { "Forochel Camp", "Lossoth Camp", "Helcaraxe Camp" } },
+        { "Quiet Avenger", new[] { "Harad Camp", "Harnen Camp", "Korondor Camp" } },
+        { "Fire King", new[] { "Orodruin Camp", "Gorgoroth Camp", "Udun Camp" } },
+        { "Long Rider", new[] { "Steppe Camp", "Khand Camp", "Variag Camp" } },
+        { "Dark Lieutenants", new[] { "Barad Camp", "Lugburz Camp", "Durburz Camp" } },
+        { "Corsairs", new[] { "Umbar Camp", "Havens Camp", "Belfalas Camp" } },
+        { "Dunlendings", new[] { "Dunland Camp", "Enedwaith Camp", "Isen Camp" } },
+        { "Khand Easterlings", new[] { "Khand Camp", "Variag Camp", "Easterling Camp" } },
+        { "Rhûn Easterlings", new[] { "Rhun Camp", "Dorwinion Camp", "Sea Camp" } },
+        { "White Wizard", new[] { "Isengard Camp", "Fangorn Camp", "Wizard Camp" } },
+    };
+    private static readonly string[] GenericCampNames = { "Camp", "Outpost", "Waycamp" };
+
     private PopulationCentre? PCAtHex(string hex)
         => _db.PopulationCentres.FirstOrDefault(p => p.LocationHex == hex);
 
@@ -713,6 +758,8 @@ public class TurnProcessor
         var (dOff, dDef) = GetSpellMods(enemyArmy.Id, false);
         var battleResult = _combat.ResolveArmyBattle(order.Army, enemyArmy, game, tacticA, null, terrain, aOff, aDef, dOff, dDef);
 
+        if (battleResult.Winner == "attacker") AwardBattleXp(order.Army, game);
+        else if (battleResult.Winner == "defender") AwardBattleXp(enemyArmy, game);
         CleanupDisbanded(order.Army, game);
         CleanupDisbanded(enemyArmy, game);
 
@@ -856,6 +903,8 @@ public class TurnProcessor
         var (dOff, dDef) = GetSpellMods(enemyArmy.Id, false);
         var battleResult = _combat.ResolveArmyBattle(order.Army, enemyArmy, game, tacticA, null, terrain, aOff, aDef, dOff, dDef);
 
+        if (battleResult.Winner == "attacker") AwardBattleXp(order.Army, game);
+        else if (battleResult.Winner == "defender") AwardBattleXp(enemyArmy, game);
         CleanupDisbanded(order.Army, game);
         CleanupDisbanded(enemyArmy, game);
 
@@ -866,6 +915,16 @@ public class TurnProcessor
 
     private static int TotalTroops(Army a)
         => a.HeavyCavalry + a.LightCavalry + a.HeavyInfantry + a.LightInfantry + a.Archers + a.MenAtArms;
+
+    // XP de batalla: +2 training al ejército vencedor y +1 mando a su comandante.
+    private void AwardBattleXp(Army army, Game game)
+    {
+        army.Training = Math.Min(100, army.Training + 2);
+        if (string.IsNullOrEmpty(army.CommanderId)) return;
+        var boss = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == army.CommanderId);
+        if (boss != null && !boss.IsDead)
+            boss.CommandSkill = Math.Min(100, boss.CommandSkill + 1);
+    }
 
     private void CleanupDisbanded(Army army, Game game)
     {
@@ -908,6 +967,7 @@ public class TurnProcessor
         var (aOff, aDef) = GetSpellMods(order.Army.Id, false);
         var result = _combat.ResolvePopulationCentreAssault(order.Army, targetPC, game, "capture", tactic, terrain, aOff, aDef);
 
+        if (result.Winner == "attacker") AwardBattleXp(order.Army, game);
         CleanupDisbanded(order.Army, game);
         order.Status = "resolved";
         order.Result = result.Message;
@@ -1005,6 +1065,7 @@ public class TurnProcessor
         var (aOff, aDef) = GetSpellMods(order.Army.Id, false);
         var result = _combat.ResolvePopulationCentreAssault(order.Army, targetPC, game, "destroy", tactic, terrain, aOff, aDef);
 
+        if (result.Winner == "attacker") AwardBattleXp(order.Army, game);
         CleanupDisbanded(order.Army, game);
         order.Status = "resolved";
         order.Result = result.Message;
@@ -1103,6 +1164,18 @@ public class TurnProcessor
         ["mounts"] = (22, 15),
         ["food"] = (3, 2)
     };
+    public static readonly Dictionary<int, int> RecruitCostPerUnit = new()
+    {
+        [400] = 200, [404] = 120, [408] = 150, [412] = 80, [416] = 100, [420] = 60
+    };
+
+    public static (int Buy, int Sell) MarketRate(string product) =>
+        MarketPrice.TryGetValue((product ?? "").ToLower(), out var p) ? p : (0, 0);
+
+    public static IReadOnlyList<string> MarketProductList() => MarketProducts;
+
+    public static bool IsMarketProductName(string? p, out string canon) => IsMarketProduct(p, out canon);
+
     private const int MarketSellCap = 20000;   // oro de venta máx por nación y turno
     private static readonly Dictionary<string, int> MarketBuyPool = new()   // uds. por producto y turno
     {
@@ -1276,35 +1349,142 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessUpgradeWeapons(Order order, Dictionary<string, JsonElement> parameters)
-    {
-        var cost = 500;
-        if (order.Nation.Gold < cost)
-        {
-            order.Status = "failed";
-            order.Result = $"Insufficient gold: need {cost}";
-            return MakeResult(order, order.Result, false);
-        }
+    // 370/375: un solo material por orden; sube el rango de los tipos asignados
+    // (por defecto todos los presentes) hasta el rango del material, con tope
+    // de tropas por la cantidad indicada. Consume oro + material en stock.
+    private static readonly string[] UpgradeableTroopTypes =
+        { "HeavyCavalry", "LightCavalry", "HeavyInfantry", "LightInfantry", "Archers", "MenAtArms" };
 
-        order.Nation.Gold -= cost;
-        order.Status = "resolved";
-        order.Result = $"Weapons upgraded for {cost} gold";
-        return MakeResult(order, order.Result);
+    private static int TroopCount(Army army, string type) => type switch
+    {
+        "HeavyCavalry" => army.HeavyCavalry,
+        "LightCavalry" => army.LightCavalry,
+        "HeavyInfantry" => army.HeavyInfantry,
+        "LightInfantry" => army.LightInfantry,
+        "Archers" => army.Archers,
+        "MenAtArms" => army.MenAtArms,
+        _ => 0
+    };
+
+    private static int TroopWeaponRank(Army army, string type) => type switch
+    {
+        "HeavyCavalry" => army.HCWeaponRank,
+        "LightCavalry" => army.LCWeaponRank,
+        "HeavyInfantry" => army.HIWeaponRank,
+        "LightInfantry" => army.LIWeaponRank,
+        "Archers" => army.ArcherWeaponRank,
+        "MenAtArms" => army.MAAWeaponRank,
+        _ => 0
+    };
+
+    private static void SetTroopWeaponRank(Army army, string type, int rank)
+    {
+        switch (type)
+        {
+            case "HeavyCavalry": army.HCWeaponRank = rank; break;
+            case "LightCavalry": army.LCWeaponRank = rank; break;
+            case "HeavyInfantry": army.HIWeaponRank = rank; break;
+            case "LightInfantry": army.LIWeaponRank = rank; break;
+            case "Archers": army.ArcherWeaponRank = rank; break;
+            case "MenAtArms": army.MAAWeaponRank = rank; break;
+        }
     }
 
-    private object ProcessUpgradeArmour(Order order, Dictionary<string, JsonElement> parameters)
+    private static int TroopArmourRank(Army army, string type) => type switch
     {
-        var cost = 600;
-        if (order.Nation.Gold < cost)
-        {
-            order.Status = "failed";
-            order.Result = $"Insufficient gold: need {cost}";
-            return MakeResult(order, order.Result, false);
-        }
+        "HeavyCavalry" => army.HCArmourRank,
+        "LightCavalry" => army.LCArmourRank,
+        "HeavyInfantry" => army.HIArmourRank,
+        "LightInfantry" => army.LIArmourRank,
+        "Archers" => army.ArcherArmourRank,
+        "MenAtArms" => army.MAAArmourRank,
+        _ => 0
+    };
 
-        order.Nation.Gold -= cost;
+    private static void SetTroopArmourRank(Army army, string type, int rank)
+    {
+        switch (type)
+        {
+            case "HeavyCavalry": army.HCArmourRank = rank; break;
+            case "LightCavalry": army.LCArmourRank = rank; break;
+            case "HeavyInfantry": army.HIArmourRank = rank; break;
+            case "LightInfantry": army.LIArmourRank = rank; break;
+            case "Archers": army.ArcherArmourRank = rank; break;
+            case "MenAtArms": army.MAAArmourRank = rank; break;
+        }
+    }
+
+    private static int MaterialStock(Nation nation, string material) => material.ToLower() switch
+    {
+        "leather" => nation.Leather,
+        "bronze" => nation.Bronze,
+        "steel" => nation.Steel,
+        "mithril" => nation.Mithril,
+        "timber" => nation.Timber,
+        _ => 0
+    };
+
+    private static void ConsumeMaterial(Nation nation, string material, int amount)
+    {
+        switch (material.ToLower())
+        {
+            case "leather": nation.Leather = Math.Max(0, nation.Leather - amount); break;
+            case "bronze": nation.Bronze = Math.Max(0, nation.Bronze - amount); break;
+            case "steel": nation.Steel = Math.Max(0, nation.Steel - amount); break;
+            case "mithril": nation.Mithril = Math.Max(0, nation.Mithril - amount); break;
+            case "timber": nation.Timber = Math.Max(0, nation.Timber - amount); break;
+        }
+    }
+
+    private object ProcessUpgradeWeapons(Order order, Dictionary<string, JsonElement> parameters)
+        => ProcessUpgradeEquipment(order, parameters, isWeapon: true);
+
+    private object ProcessUpgradeArmour(Order order, Dictionary<string, JsonElement> parameters)
+        => ProcessUpgradeEquipment(order, parameters, isWeapon: false);
+
+    private object ProcessUpgradeEquipment(Order order, Dictionary<string, JsonElement> parameters, bool isWeapon)
+    {
+        if (order.Army == null) return MakeResult(order, "No army specified", false);
+        var kind = isWeapon ? "Weapons" : "Armour";
+        var goldCost = isWeapon ? 500 : 600;
+
+        var material = "bronze";
+        if (parameters.TryGetValue("material", out var matEl)) material = matEl.GetString() ?? material;
+        if (!MaterialRank.TryGetValue(material, out var targetRank))
+            return MakeResult(order, "Material must be leather, bronze, steel or mithril", false);
+
+        var types = UpgradeableTroopTypes.Where(t => TroopCount(order.Army!, t) > 0).ToList();
+        if (parameters.TryGetValue("troopTypes", out var ttEl) && ttEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            var wanted = ttEl.EnumerateArray().Select(e => e.GetString() ?? "").ToHashSet(System.StringComparer.OrdinalIgnoreCase);
+            types = UpgradeableTroopTypes.Where(t => wanted.Contains(t) && TroopCount(order.Army!, t) > 0).ToList();
+        }
+        if (types.Count == 0) return MakeResult(order, $"No troops of the assigned types in {order.Army.Name}", false);
+
+        var amount = types.Sum(t => TroopCount(order.Army!, t));
+        if (parameters.TryGetValue("amount", out var amtEl)) amount = Math.Max(0, Math.Min(amtEl.GetInt32(), amount));
+        if (amount <= 0) return MakeResult(order, "Amount must be positive", false);
+
+        var materialUnits = Math.Max(1, (amount + 99) / 100);
+        if (order.Nation.Gold < goldCost || MaterialStock(order.Nation, material) < materialUnits)
+            return MakeResult(order, $"Insufficient resources: need {goldCost} gold and {materialUnits} {material}", false);
+
+        var upgraded = new List<string>();
+        foreach (var t in types)
+        {
+            var current = isWeapon ? TroopWeaponRank(order.Army, t) : TroopArmourRank(order.Army, t);
+            if (current >= targetRank) continue;
+            if (isWeapon) SetTroopWeaponRank(order.Army, t, targetRank);
+            else SetTroopArmourRank(order.Army, t, targetRank);
+            upgraded.Add(t);
+        }
+        if (upgraded.Count == 0)
+            return MakeResult(order, $"{kind} already at {material} rank or better", false);
+
+        order.Nation.Gold -= goldCost;
+        ConsumeMaterial(order.Nation, material, materialUnits);
         order.Status = "resolved";
-        order.Result = $"Armour upgraded for {cost} gold";
+        order.Result = $"{kind} upgraded to {material} for {string.Join(", ", upgraded)} ({amount} troops, {goldCost} gold, {materialUnits} {material})";
         return MakeResult(order, order.Result);
     }
 
@@ -1745,8 +1925,10 @@ public class TurnProcessor
 
         var destroyed = Math.Min(amount, navy.Warships);
         navy.Warships -= destroyed;
+        if (order.Character != null)
+            order.Character.CommandSkill = Math.Min(100, order.Character.CommandSkill + 1);
         order.Status = "resolved";
-        order.Result = $"Destroyed {destroyed} warships";
+        order.Result = $"Destroyed {destroyed} warships (+1 command)";
         return MakeResult(order, order.Result);
     }
 
@@ -1875,7 +2057,8 @@ public class TurnProcessor
 
     private object ProcessUseCombatArtifact(Order order, Dictionary<string, JsonElement> parameters)
     {
-        var artifact = order.Character?.Artifacts.FirstOrDefault(a => a.Type == "combat");
+        var artifact = order.Character?.Artifacts
+            .FirstOrDefault(a => a.HeldByCharacterId == order.Character!.Id && CombatArtifactTypes.Contains(a.Type ?? ""));
         if (artifact == null)
             return MakeResult(order, "No combat artifact available", false);
 
@@ -2074,13 +2257,24 @@ public class TurnProcessor
                 break;
             case "lore":
                 if (ch.MageSkill > 0)
-                    _db.Spells.Add(new Spell
+                {
+                    var lorePool = SpellCatalog.OfType(SpellType.Lore).Where(s => !s.IsLost).ToList();
+                    if (lorePool.Count > 0)
                     {
-                        Id = Guid.NewGuid().ToString(),
-                        CharacterId = ch.Id,
-                        SpellId = _rng.Next(120, 340),
-                        IsKnown = true,
-                    });
+                        var learned = lorePool[_rng.Next(lorePool.Count)];
+                        _db.Spells.Add(new Spell
+                        {
+                            Id = Guid.NewGuid().ToString(),
+                            CharacterId = ch.Id,
+                            SpellId = learned.Id,
+                            IsKnown = true,
+                            IsLost = false,
+                            Rank = 0
+                        });
+                        enc.Result = $"Learned lore: {learned.Name} (roll {roll})";
+                        break;
+                    }
+                }
                 enc.Result = $"Learned lore (roll {roll})";
                 break;
             case "creature":
@@ -2307,6 +2501,12 @@ public class TurnProcessor
         if (!KnowsSpell(order.Character, SpellType.Heal))
             return SpellUnknown(order, SpellType.Heal);
 
+        if (!parameters.TryGetValue("spellId", out var sidEl)
+            || SpellCatalog.Get(sidEl.GetInt32()) is not { } def
+            || def.Type != SpellType.Heal || def.IsLost
+            || !order.Character!.Spells.Any(s => s.SpellId == def.Id && s.IsKnown && !s.IsLost))
+            return MakeResult(order, "Info must contain a valid known healing spell (spellId)", false);
+
         var roll = order.Character!.MageSkill + _rng.Next(1, 7);
         var success = roll >= 8;
 
@@ -2317,8 +2517,9 @@ public class TurnProcessor
             {
                 var healAmount = _rng.Next(20, 50);
                 target.Health = Math.Min(target.MaxHealth, target.Health + healAmount);
+                order.Character.MageSkill = Math.Min(100, order.Character.MageSkill + 1);
                 order.Status = "resolved";
-                order.Result = $"Heal successful (roll {roll}): {target.Name} healed {healAmount} HP";
+                order.Result = $"Heal successful (roll {roll}): {target.Name} healed {healAmount} HP (+1 mage skill)";
                 return MakeResult(order, order.Result);
             }
         }
@@ -2333,6 +2534,12 @@ public class TurnProcessor
         if (!KnowsSpell(order.Character, SpellType.Conjuring))
             return SpellUnknown(order, SpellType.Conjuring);
 
+        if (!parameters.TryGetValue("spellId", out var sidEl)
+            || SpellCatalog.Get(sidEl.GetInt32()) is not { } def
+            || def.Type != SpellType.Conjuring || def.IsLost
+            || !order.Character!.Spells.Any(s => s.SpellId == def.Id && s.IsKnown && !s.IsLost))
+            return MakeResult(order, "Info must contain a valid known conjuring spell (spellId)", false);
+
         var roll = order.Character!.MageSkill + _rng.Next(1, 7);
         var success = roll >= 10;
 
@@ -2340,8 +2547,9 @@ public class TurnProcessor
         {
             var amount = _rng.Next(100, 500);
             order.Nation.Gold += amount;
+            order.Character.MageSkill = Math.Min(100, order.Character.MageSkill + 1);
             order.Status = "resolved";
-            order.Result = $"Conjuring successful (roll {roll}): created {amount} gold";
+            order.Result = $"Conjuring successful (roll {roll}): created {amount} gold (+1 mage skill)";
         }
         else
         {
@@ -2473,6 +2681,12 @@ public class TurnProcessor
         if (!KnowsSpell(order.Character, SpellType.Lore))
             return SpellUnknown(order, SpellType.Lore);
 
+        if (!parameters.TryGetValue("spellId", out var sidEl)
+            || SpellCatalog.Get(sidEl.GetInt32()) is not { } def
+            || def.Type != SpellType.Lore || def.IsLost
+            || !order.Character!.Spells.Any(s => s.SpellId == def.Id && s.IsKnown && !s.IsLost))
+            return MakeResult(order, "Info must contain a valid known lore spell (spellId)", false);
+
         var roll = order.Character!.MageSkill + _rng.Next(1, 7);
         var success = roll >= 10;
 
@@ -2482,6 +2696,8 @@ public class TurnProcessor
             order.Result = $"Lore spell failed (roll {roll})";
             return MakeResult(order, order.Result);
         }
+
+        order.Character.MageSkill = Math.Min(100, order.Character.MageSkill + 1);
 
         // Revelar ejÃ©rcitos enemigos en el hex indicado (o el del lanzador)
         var hex = order.Character.LocationHex;
@@ -2504,17 +2720,18 @@ public class TurnProcessor
     private object ProcessCastCombatSpell(Order order, Dictionary<string, JsonElement> parameters)
     {
         // El hechizo de combate se aplica durante la batalla de la fuerza del personaje
-        // (orden 230/235/250/255 o un ataque naval), sumando/restando fuerza segÃºn la
-        // tabla de hechizos de combate. AquÃ­ sÃ³lo se registra y resuelve la orden.
-        var spell = SpellFromParameters(order.Parameters);
-        if (spell == null)
-        {
-            order.Status = "resolved";
-            order.Result = "Combat spell cast (no spell number provided)";
-            return MakeResult(order, order.Result);
-        }
+        // (orden 230/235/250/255 o un ataque naval), sumando/restando fuerza según la
+        // tabla de hechizos de combate. Aquí sólo se registra y resuelve la orden.
+        if (order.Character == null || order.Character.MageSkill <= 0)
+            return MakeResult(order, "Needs a mage to cast combat spells", false);
+        if (!parameters.TryGetValue("spellId", out var sidEl)
+            || SpellCatalog.Get(sidEl.GetInt32()) is not { } def
+            || def.Type != SpellType.Combat || def.IsLost
+            || !order.Character.Spells.Any(s => s.SpellId == def.Id && s.IsKnown && !s.IsLost))
+            return MakeResult(order, "Info must contain a valid known combat spell (spellId)", false);
+        order.Character.MageSkill = Math.Min(100, order.Character.MageSkill + 1);
         order.Status = "resolved";
-        order.Result = $"Combat spell {spell} will be cast in battle";
+        order.Result = $"Combat spell {def.Name} will be cast in battle (+1 mage skill)";
         return MakeResult(order, order.Result);
     }
 
@@ -2535,42 +2752,93 @@ public class TurnProcessor
 
     // â”€â”€ EMISSARY EXTRA â”€â”€
 
+    // 500: espía en UNA nación (targetNationId). Solo un activo por nación y turno.
     private object ProcessRecruitDoubleAgent(Order order, Dictionary<string, JsonElement> parameters)
     {
-        var roll = order.Character?.EmissarySkill + _rng.Next(1, 7) ?? 8;
+        if (order.Character == null) return MakeResult(order, "No character", false);
+        if (!parameters.TryGetValue("targetNationId", out var natEl))
+            return MakeResult(order, "Missing targetNationId: double agents operate in a single nation", false);
+        var targetNationId = natEl.GetString();
+        var targetNation = _db.Nations.FirstOrDefault(n => n.Id == targetNationId && n.GameId == order.GameId);
+        if (targetNation == null) return MakeResult(order, "Target nation not found", false);
+        if (targetNationId == order.NationId) return MakeResult(order, "Cannot plant a double agent in your own nation", false);
+
+        var existing = _db.GameEvents.FirstOrDefault(e => e.GameId == order.GameId
+            && e.Type == "double_agent" && e.Data.Contains(targetNationId!));
+        if (existing != null)
+            return MakeResult(order, $"Already have a double agent in {targetNation.Name}", false);
+
+        var roll = order.Character.EmissarySkill + _rng.Next(1, 7);
         var success = roll >= 12;
 
         order.Status = "resolved";
-        order.Result = success
-            ? $"Double agent recruited (roll {roll})"
-            : $"Recruitment failed (roll {roll})";
+        if (!success)
+        {
+            order.Result = $"Recruitment failed in {targetNation.Name} (roll {roll})";
+            return MakeResult(order, order.Result);
+        }
+        _db.GameEvents.Add(new GameEvent
+        {
+            Id = Guid.NewGuid().ToString(),
+            GameId = order.GameId,
+            TurnId = order.TurnId,
+            Type = "double_agent",
+            Data = $"{{\"nationId\":\"{targetNationId}\",\"characterId\":\"{order.Character.Id}\"}}"
+        });
+        order.Result = $"Double agent recruited in {targetNation.Name} (roll {roll})";
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessBribeCharacter(Order order, Dictionary<string, JsonElement> parameters)
+    // 505: soborno/reclutamiento sobre personajes de naciones NO jugadas del mismo
+    // bando. Si se cumplen (mismo bando, nación sin jugador, <21 pjs) el personaje
+    // se une; si no, queda como agente sobornado un turno y revela información.
+    private object ProcessBribeCharacter(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
         if (!parameters.TryGetValue("targetId", out var tgtEl))
             return MakeResult(order, "No target specified", false);
 
-        var target = _db.Characters.Find(tgtEl.GetString());
+        var target = _db.Characters.Include(c => c.Nation).FirstOrDefault(c => c.Id == tgtEl.GetString());
         if (target == null) return MakeResult(order, "Target not found", false);
+        if (target.NationId == order.NationId) return MakeResult(order, "Cannot bribe your own character", false);
+        if (order.Character == null || order.Character.EmissarySkill <= 0)
+            return MakeResult(order, "Needs emissary skill", false);
 
-        var cost = 500;
-        if (order.Nation.Gold < cost)
+        var amount = 500;
+        if (parameters.TryGetValue("amount", out var amtEl)) amount = Math.Max(500, amtEl.GetInt32());
+        if (order.Nation.Gold < amount)
         {
             order.Status = "failed";
-            order.Result = $"Insufficient gold: need {cost}";
+            order.Result = $"Insufficient gold: need {amount}";
             return MakeResult(order, order.Result, false);
         }
 
-        order.Nation.Gold -= cost;
-        var roll = order.Character?.EmissarySkill + _rng.Next(1, 7) ?? 8;
-        var success = roll >= 10;
+        order.Nation.Gold -= amount;
+        var roll = order.Character.EmissarySkill + _rng.Next(1, 7) + Math.Min(10, amount / 1000);
+        var success = roll >= 12;
 
         order.Status = "resolved";
-        order.Result = success
-            ? $"Bribe successful (roll {roll}): {target.Name} influenced"
-            : $"Bribe failed (roll {roll}): {target.Name} refused";
+        if (!success)
+        {
+            order.Result = $"Bribe failed (roll {roll}): {target.Name} refused";
+            return MakeResult(order, order.Result);
+        }
+        order.Character.EmissarySkill = Math.Min(100, order.Character.EmissarySkill + _rng.Next(1, 11));
+
+        var targetPlayed = game.Players.Any(p => p.NationId == target.NationId);
+        var sameAllegiance = target.Nation != null && target.Nation.Allegiance == order.Nation.Allegiance;
+        var nationSize = game.Nations.SelectMany(n => n.Characters).Count(c => c.NationId == order.NationId && !c.IsDead);
+        if (sameAllegiance && !targetPlayed && nationSize < 21)
+        {
+            var from = target.Nation?.Name ?? "?";
+            target.NationId = order.NationId;
+            order.Result = $"Bribe successful (roll {roll}): {target.Name} recruited from {from} (+emissary skill)";
+            return MakeResult(order, order.Result);
+        }
+        var intelNation = target.Nation;
+        var intel = intelNation == null ? "?" :
+            $"gold {intelNation.Gold}, {intelNation.PopulationCentres.Count} PCs ({string.Join(", ", intelNation.PopulationCentres.Select(p => p.Name))}), " +
+            $"{intelNation.Armies.Sum(a => a.HeavyCavalry + a.LightCavalry + a.HeavyInfantry + a.LightInfantry + a.Archers + a.MenAtArms)} troops";
+        order.Result = $"Bribe successful (roll {roll}): {target.Name} is your bribed agent for this turn (+emissary skill). Intel: {intel}";
         return MakeResult(order, order.Result);
     }
 
@@ -2661,7 +2929,7 @@ public class TurnProcessor
         {
             Id = Guid.NewGuid().ToString(),
             NationId = order.NationId,
-            Name = "Camp",
+            Name = CampName(order, parameters),
             Size = "camp",
             LocationHex = hex,
             Loyalty = 50,
@@ -2670,8 +2938,26 @@ public class TurnProcessor
         };
         _db.PopulationCentres.Add(camp);
         order.Status = "resolved";
-        order.Result = $"Camp created at {hex} for {cost} gold";
+        order.Result = $"Camp {camp.Name} created at {hex} for {cost} gold";
         return MakeResult(order, order.Result);
+    }
+
+    // Nombre indicado o pool acorde a la nación.
+    private string CampName(Order order, Dictionary<string, JsonElement> parameters)
+    {
+        if (parameters.TryGetValue("name", out var nEl))
+        {
+            var given = (nEl.GetString() ?? "").Trim();
+            if (given.Length > 0) return given[..Math.Min(60, given.Length)];
+        }
+        var pool = CampNamePools.TryGetValue(order.Nation?.Name ?? "", out var names) ? names : GenericCampNames;
+        return pool[_rng.Next(pool.Length)];
+    }
+
+    public static string[] CampSuggestions(string? nationName)
+    {
+        if (nationName != null && CampNamePools.TryGetValue(nationName, out var names)) return names;
+        return GenericCampNames;
     }
 
     private object ProcessAbandonCamp(Order order, Dictionary<string, JsonElement> parameters)
@@ -2724,6 +3010,26 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
+    private static void SetMutualRelation(Order order, Game game, string otherNationId, int level)
+    {
+        var fwd = order.Nation.Relations.FirstOrDefault(r => r.TargetNationId == otherNationId);
+        if (fwd == null)
+        {
+            fwd = new NationRelation { Id = Guid.NewGuid().ToString(), NationId = order.NationId, TargetNationId = otherNationId };
+            order.Nation.Relations.Add(fwd);
+        }
+        fwd.Level = level;
+        var backNation = game.Nations.FirstOrDefault(n => n.Id == otherNationId);
+        if (backNation == null) return;
+        var back = backNation.Relations.FirstOrDefault(r => r.TargetNationId == order.NationId);
+        if (back == null)
+        {
+            back = new NationRelation { Id = Guid.NewGuid().ToString(), NationId = otherNationId, TargetNationId = order.NationId };
+            backNation.Relations.Add(back);
+        }
+        back.Level = level;
+    }
+
     // 525: +d6>=12, -5-15 lealtad ajena y +1-10 emisario. Sin toma de control
     // (el reglamento solo da "posibilidad" sin fórmula).
     private object ProcessInfluenceOther(Order order, Dictionary<string, JsonElement> parameters, Game game)
@@ -2751,8 +3057,10 @@ public class TurnProcessor
         }
         pc.Loyalty = Math.Max(0, pc.Loyalty - _rng.Next(5, 16));
         order.Character.EmissarySkill = Math.Min(100, order.Character.EmissarySkill + _rng.Next(1, 11));
+        // La nación objetivo se vuelve neutral hacia nosotros (ambas direcciones).
+        SetMutualRelation(order, game, pc.NationId, 0);
         order.Status = "resolved";
-        order.Result = $"Loyalty at {pc.Name} lowered to {pc.Loyalty} (roll {roll})";
+        order.Result = $"Loyalty at {pc.Name} lowered to {pc.Loyalty} (roll {roll}); relations now neutral";
         return MakeResult(order, order.Result);
     }
 
@@ -2825,7 +3133,10 @@ public class TurnProcessor
     {
         if (!p.TryGetValue("allegiance", out var el))
             return MakeResult(order, "Missing allegiance", false);
-        order.Nation.Allegiance = el.GetString() ?? order.Nation.Allegiance;
+        var allegiance = (el.GetString() ?? "").ToLower();
+        if (allegiance != "free_peoples" && allegiance != "dark_servants" && allegiance != "neutral")
+            return MakeResult(order, "Allegiance must be free_peoples, dark_servants or neutral", false);
+        order.Nation.Allegiance = allegiance;
         order.Status = "resolved";
         order.Result = $"Allegiance changed to {order.Nation.Allegiance}";
         return MakeResult(order, order.Result);
@@ -3522,7 +3833,7 @@ public class TurnProcessor
         {
             Id = Guid.NewGuid().ToString(),
             NationId = order.NationId,
-            Name = "Camp",
+            Name = CampName(order, p),
             Size = "camp",
             LocationHex = hex,
             Loyalty = 50,
@@ -3531,7 +3842,7 @@ public class TurnProcessor
         };
         _db.PopulationCentres.Add(camp);
         order.Status = "resolved";
-        order.Result = $"Camp posted at {hex} for {cost} gold";
+        order.Result = $"Camp {camp.Name} posted at {hex} for {cost} gold";
         return MakeResult(order, order.Result);
     }
 

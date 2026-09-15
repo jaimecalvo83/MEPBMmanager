@@ -29,3 +29,72 @@ export function useCancelOrder(gameId: string) {
 export function useValidateOrders(gameId: string) {
   return useMutation(() => ordersApi.validate(gameId));
 }
+
+export interface EligibleOrder {
+  code: number;
+  ok: boolean;
+  reason: string;
+}
+
+export function useEligibleOrders(gameId: string, characterId: string | null) {
+  return useQuery<EligibleOrder[]>(
+    ['eligible-orders', gameId, characterId],
+    async () => {
+      const { data } = await ordersApi.eligible(gameId, characterId!);
+      return data.eligible;
+    },
+    { enabled: !!gameId && !!characterId, retry: false }
+  );
+}
+
+export interface OrderFieldOption {
+  value: string;
+  label: string;
+}
+
+export interface OrderFieldSpec {
+  key: string;
+  label: string;
+  kind: string;
+  required: boolean;
+  min?: number | null;
+  max?: number | null;
+  def?: string | null;
+  options?: OrderFieldOption[] | null;
+}
+
+export interface OrderEstimate {
+  ok: boolean;
+  errors: string[];
+  costs: Record<string, number>;
+  maxAmount: number | null;
+  expectedGold: number | null;
+  requires: OrderFieldSpec[];
+  effectiveLocation: string | null;
+  movedByFirstOrder: boolean;
+  suggestNames: string[] | null;
+}
+
+export function useOrderEstimate(
+  gameId: string,
+  characterId: string | null,
+  code: number,
+  paramsKey: string,
+  afterKey: string,
+  buildPayload: () => { parameters: Record<string, unknown>; armyId?: string; afterOrder?: { code: number; parameters?: Record<string, unknown> } } | null
+) {
+  return useQuery<OrderEstimate>(
+    ['order-estimate', gameId, characterId, code, paramsKey, afterKey],
+    async () => {
+      const payload = buildPayload();
+      if (!payload) throw new Error('No payload');
+      const { data } = await ordersApi.estimate(gameId, {
+        characterId: characterId!,
+        code,
+        ...payload,
+      });
+      return data;
+    },
+    { enabled: !!gameId && !!characterId && code > 0 && !!paramsKey, retry: false, staleTime: 30000 }
+  );
+}
