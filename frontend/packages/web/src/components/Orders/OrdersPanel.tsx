@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOrders, useSubmitOrder, useCancelOrder, useValidateOrders, useEligibleOrders, useOrderEstimate, OrderFieldSpec } from '../../hooks/useOrders';
 import { ORDER_DEFINITIONS } from '@MEPBMmanager/shared';
 import { ORDER_SCHEMAS } from './orderSchemas';
+import SearchSelect from './SearchSelect';
 import { useQueryClient } from 'react-query';
 
 interface Character {
@@ -157,16 +158,12 @@ function OrderComposer({
       return (
         <div key={f.key}>
           <label className="block text-sm text-gray-400 mb-1">{label}{f.required ? ' *' : ''}</label>
-          <select
+          <SearchSelect
             value={typeof value === 'string' ? value : ''}
-            onChange={(e) => setParam(f.key, e.target.value || undefined)}
-            className="w-full p-2 bg-gray-700 rounded border border-gray-600"
-          >
-            <option value="">Select…</option>
-            {(f.options ?? []).map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+            options={(f.options ?? []).map((o) => ({ value: o.value, label: o.label }))}
+            onChange={(v) => setParam(f.key, v || undefined)}
+            placeholder="Select…"
+          />
           {override?.help && <p className="text-xs text-gray-500 mt-1">{override.help}</p>}
         </div>
       );
@@ -232,21 +229,18 @@ function OrderComposer({
       {eligErrorMsg && (
         <p className="text-red-400 text-sm">{eligErrorMsg}</p>
       )}
-      <select
-        value={orderCode}
-        onChange={(e) => {
-          setOrderCode(parseInt(e.target.value));
+      <SearchSelect
+        value={orderCode > 0 ? String(orderCode) : ''}
+        options={availableOrders.map((order) => ({
+          value: String(order.code),
+          label: `[${order.code}] ${order.abbreviation} - ${order.name}`,
+        }))}
+        onChange={(v) => {
+          setOrderCode(v === '' ? 0 : parseInt(v, 10));
           setParams({});
         }}
-        className="w-full p-2 bg-gray-700 rounded border border-gray-600"
-      >
-        <option value={0}>Select order…</option>
-        {availableOrders.map((order) => (
-          <option key={order.code} value={order.code}>
-            [{order.code}] {order.abbreviation} - {order.name}
-          </option>
-        ))}
-      </select>
+        placeholder="Select order…"
+      />
       {schema?.help && orderCode > 0 && (
         <p className="text-xs text-gray-400 italic">{schema.help}</p>
       )}
@@ -255,17 +249,21 @@ function OrderComposer({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="block text-sm text-gray-400 mb-1">Army (optional context)</label>
-            <select value={armyId} onChange={(e) => setArmyId(e.target.value)} className="w-full p-2 bg-gray-700 rounded border border-gray-600">
-              <option value="">Default</option>
-              {armies.map((a) => <option key={a.id} value={a.id}>{a.name} @ {a.locationHex}</option>)}
-            </select>
+            <SearchSelect
+              value={armyId}
+              options={armies.map((a) => ({ value: a.id, label: `${a.name} @ ${a.locationHex}` }))}
+              onChange={setArmyId}
+              placeholder="Default"
+            />
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-1">Navy (optional context)</label>
-            <select value={navyId} onChange={(e) => setNavyId(e.target.value)} className="w-full p-2 bg-gray-700 rounded border border-gray-600">
-              <option value="">Default</option>
-              {navies.map((v) => <option key={v.id} value={v.id}>Navy @ {v.locationHex} ({v.warships}W/{v.transports}T)</option>)}
-            </select>
+            <SearchSelect
+              value={navyId}
+              options={navies.map((v) => ({ value: v.id, label: `Navy @ ${v.locationHex} (${v.warships}W/${v.transports}T)` }))}
+              onChange={setNavyId}
+              placeholder="Default"
+            />
           </div>
         </div>
       )}
