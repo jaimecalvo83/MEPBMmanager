@@ -703,7 +703,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
           )}
 
           {activeTab === 'orders' && (
-            <OrdersPanel gameId={gameState?.game?.id} characters={characters} />
+            <OrdersPanel gameId={gameState?.game?.id} characters={characters} armies={armies} navies={(gameState as any)?.navies || []} />
           )}
 
           {activeTab === 'messages' && (
