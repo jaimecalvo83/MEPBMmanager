@@ -78,8 +78,11 @@ function OrderComposer({
   const [armyId, setArmyId] = useState<string>('');
   const [navyId, setNavyId] = useState<string>('');
 
-  const { data: eligible } = useEligibleOrders(gameId, character.id);
+  const { data: eligible, isError: eligError, error: eligErrDetail } = useEligibleOrders(gameId, character.id);
   const eligibleSet = useMemo(() => new Set((eligible ?? []).filter((e) => e.ok).map((e) => e.code)), [eligible]);
+  const eligErrorMsg = eligError
+    ? ((eligErrDetail as any)?.response?.data?.error || 'Could not load eligible orders')
+    : null;
   const availableOrders = useMemo(
     () => ORDER_DEFINITIONS.filter((o) => eligibleSet.has(o.code)),
     [eligibleSet]
@@ -226,6 +229,9 @@ function OrderComposer({
         <span className="text-sm font-bold text-gray-300">{slotLabel}</span>
         {eligible && <span className="text-xs text-gray-500">{availableOrders.length} available</span>}
       </div>
+      {eligErrorMsg && (
+        <p className="text-red-400 text-sm">{eligErrorMsg}</p>
+      )}
       <select
         value={orderCode}
         onChange={(e) => {

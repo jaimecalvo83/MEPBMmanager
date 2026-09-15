@@ -23,10 +23,10 @@ public class OrdersController : ControllerBase
 
     [HttpGet]
     [Authorize]
-    public async Task<IActionResult> List(string gameId)
+    public async Task<IActionResult> List(string gameId, [FromQuery] string? nationId = null)
     {
-        var nationId = await GetPlayerNationId(gameId);
-        if (nationId == null)
+        var scope = await ResolveListScope(gameId, nationId);
+        if (scope == null)
             return StatusCode(403, new { error = "Not a player in this game" });
 
         var currentTurn = await _db.Turns
@@ -39,7 +39,7 @@ public class OrdersController : ControllerBase
 
         var orders = await _db.Orders
             .Include(o => o.Character)
-            .Where(o => o.GameId == gameId && o.TurnId == currentTurn.Id && o.NationId == nationId)
+            .Where(o => o.GameId == gameId && o.TurnId == currentTurn.Id && (scope == "*" || o.NationId == scope))
             .OrderBy(o => o.SubmittedAt)
             .ToListAsync();
 
@@ -65,7 +65,7 @@ public class OrdersController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Submit(string gameId, [FromBody] SubmitOrderRequest request)
     {
-        var nationId = await GetPlayerNationId(gameId);
+        var nationId = await ResolveScopeNation(gameId, request.CharacterId);
         if (nationId == null)
             return StatusCode(403, new { error = "Not a player in this game" });
 
@@ -134,15 +134,18 @@ public class OrdersController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Cancel(string gameId, string orderId)
     {
-        var nationId = await GetPlayerNationId(gameId);
-        if (nationId == null)
-            return StatusCode(403, new { error = "Not a player in this game" });
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var role = User.FindFirstValue(ClaimTypes.Role);
+        var playerNation = await GetPlayerNationId(gameId);
 
         var order = await _db.Orders
-            .FirstOrDefaultAsync(o => o.Id == orderId && o.GameId == gameId && o.NationId == nationId && o.Status == "pending");
+            .FirstOrDefaultAsync(o => o.Id == orderId && o.GameId == gameId && o.Status == "pending");
 
         if (order == null)
             return NotFound(new { error = "Order not found or cannot be cancelled" });
+
+        if (order.NationId != playerNation && !await IsStaff(gameId, userId, role))
+            return StatusCode(403, new { error = "Not a player in this game" });
 
         _db.Orders.Remove(order);
         await _db.SaveChangesAsync();
@@ -152,10 +155,10 @@ public class OrdersController : ControllerBase
 
     [HttpPost("validate")]
     [Authorize]
-    public async Task<IActionResult> Validate(string gameId)
+    public async Task<IActionResult> Validate(string gameId, [FromQuery] string? nationId = null)
     {
-        var nationId = await GetPlayerNationId(gameId);
-        if (nationId == null)
+        var scope = await ResolveListScope(gameId, nationId);
+        if (scope == null)
             return StatusCode(403, new { error = "Not a player in this game" });
 
         var currentTurn = await _db.Turns
@@ -168,7 +171,7 @@ public class OrdersController : ControllerBase
 
         var orders = await _db.Orders
             .Include(o => o.Character)
-            .Where(o => o.GameId == gameId && o.TurnId == currentTurn.Id && o.NationId == nationId && o.Status == "pending")
+            .Where(o => o.GameId == gameId && o.TurnId == currentTurn.Id && (scope == "*" || o.NationId == scope) && o.Status == "pending")
             .ToListAsync();
 
         var validationResults = orders.Select(order => new OrderValidationResult
@@ -203,7 +206,7 @@ public class OrdersController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Eligible(string gameId, [FromQuery] string characterId)
     {
-        var nationId = await GetPlayerNationId(gameId);
+        var nationId = await ResolveScopeNation(gameId, characterId);
         if (nationId == null)
             return StatusCode(403, new { error = "Not a player in this game" });
 
@@ -290,7 +293,7 @@ public class OrdersController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Estimate(string gameId, [FromBody] EstimateOrderRequest req)
     {
-        var nationId = await GetPlayerNationId(gameId);
+        var nationId = await ResolveScopeNation(gameId, req.CharacterId);
         if (nationId == null)
             return StatusCode(403, new { error = "Not a player in this game" });
 
@@ -1051,6 +1054,37 @@ public class OrdersController : ControllerBase
         var player = await _db.Players
             .FirstOrDefaultAsync(p => p.UserId == userId && p.GameId == gameId);
         return player?.NationId;
+    }
+
+    private async Task<bool> IsStaff(string gameId, string userId, string? role) =>
+        role == "test_admin" || await _db.GameAdmins.AnyAsync(ga => ga.GameId == gameId && ga.UserId == userId);
+
+    // Nación sobre la que se opera: la propia si eres jugador; si eres staff
+    // (test_admin o game-admin), la del personaje indicado (para operar PNJs).
+    private async Task<string?> ResolveScopeNation(string gameId, string? characterId = null)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var role = User.FindFirstValue(ClaimTypes.Role);
+        var playerNation = await GetPlayerNationId(gameId);
+        if (playerNation != null) return playerNation;
+        if (!await IsStaff(gameId, userId, role) || characterId == null) return null;
+        var charNation = await _db.Characters
+            .Where(c => c.Id == characterId).Select(c => c.NationId).FirstOrDefaultAsync();
+        if (charNation == null) return null;
+        return await _db.Nations.AnyAsync(n => n.Id == charNation && n.GameId == gameId) ? charNation : null;
+    }
+
+    // Scope para listados: nación propia, "*" (todo el juego) para staff,
+    // o una nación concreta (?nationId=) validada para staff.
+    private async Task<string?> ResolveListScope(string gameId, string? nationId)
+    {
+        var playerNation = await GetPlayerNationId(gameId);
+        if (playerNation != null) return playerNation;
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var role = User.FindFirstValue(ClaimTypes.Role);
+        if (!await IsStaff(gameId, userId, role)) return null;
+        if (nationId == null) return "*";
+        return await _db.Nations.AnyAsync(n => n.Id == nationId && n.GameId == gameId) ? nationId : null;
     }
 
     private static bool IsValidOrderCode(int code) =>
