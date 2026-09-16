@@ -218,7 +218,7 @@ public class OrdersController : ControllerBase
         if (ch == null) return NotFound(new { error = "Character not found" });
 
         var nation = await _db.Nations
-            .Include(n => n.Armies).Include(n => n.Navies)
+            .Include(n => n.Armies).Include(n => n.Navies).Include(n => n.PopulationCentres)
             .FirstOrDefaultAsync(n => n.Id == nationId);
         var commandsNavy = nation?.Navies.Any(v => v.CommanderId == ch.Id) == true;
 
@@ -259,6 +259,15 @@ public class OrdersController : ControllerBase
             return (false, "No navy available");
         if (def.Code == 830 && !commandsNavy)
             return (false, "Must command a navy");
+        var capHex = nation?.PopulationCentres.FirstOrDefault(p => p.IsCapital)?.LocationHex;
+        var atCapital = capHex != null && capHex == ch.LocationHex;
+        if ((def.Code is 175 or 180 or 185 or 280 or 300 or 325 or 660 or 725 or 728 or 731 or 734 or 737) && !atCapital)
+            return (false, "Must be at your own capital");
+        if (def.Code == 950 && ch.LocationHex != capHex)
+            return (false, "Must be at your current capital");
+        if ((def.Code is 520 or 530 or 535 or 550 or 705 or 710)
+            && (nation == null || !nation.PopulationCentres.Any(p => p.LocationHex == ch.LocationHex && p.NationId == nation.Id)))
+            return (false, "Must be at one of your population centres");
         var r = def.Restrictions;
         if (r.Length == 0 || r.Contains("without")) return (true, "");
         var type = (ch.Type ?? "").ToLower();
@@ -538,7 +547,7 @@ public class OrdersController : ControllerBase
                 { Sel("artifactId", "Artifact", _db.Artifacts.Where(a => (a.HeldByCharacterId != null && a.HeldByCharacterId != ch.Id) || (a.HeldByCharacterId == null && a.LocationHex == ctx.EffLoc)).ToList().Select(a => new OrderFieldOptionDto(a.Id, a.HeldByCharacterId == null ? $"{a.Name} @ {a.LocationHex ?? "?"}" : a.Name)).ToList()) },
             505 => new() { Sel("targetId", "Target character", CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => c.NationId != ctx.Nation.Id && !c.IsDead))), Num("amount", "Bribe gold (min 500)", req: false, min: 500) },
             552 or 555 => new() { Txt("name", "Camp name (empty = nation pool)", req: false) },
-            520 or 525 or 530 or 535 or 550 or 560 or 565 or 580 or 585 => new() { Hx("hex", "Hex (empty = current location)", req: false) },
+            560 or 565 or 580 or 585 => new() { Hx("hex", "Hex (empty = current location)", req: false) },
             360 => new() { Multi("artifactId", "Artifacts", heldArts), Sel("targetId", "To character (same hex)", CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => !c.IsDead && !c.IsKidnapped))) },
             792 or 796 => new() { Multi("artifactId", "Artifacts (1-6)", heldArts) },
             700 => new() { Multi("spellId", "Spells to forget (1-6)", ch.Spells.Where(s => s.IsKnown && !s.IsLost).Select(s => new OrderFieldOptionDto(s.SpellId.ToString(), $"#{s.SpellId} {SpellCatalog.Get(s.SpellId)?.Name ?? "?"}")).ToList()) },
@@ -615,6 +624,11 @@ public class OrdersController : ControllerBase
             var cap = ctx.Nation.PopulationCentres.FirstOrDefault(p => p.IsCapital)?.LocationHex;
             if (cap == null || cap != ctx.EffLoc) errors.Add("Must be at your own capital");
             if (!ctx.Nation.Navies.Any()) errors.Add("No navy");
+        }
+        if (code is 300 or 325)
+        {
+            var cap = ctx.Nation.PopulationCentres.FirstOrDefault(p => p.IsCapital)?.LocationHex;
+            if (cap == null || cap != ctx.EffLoc) errors.Add("Must be at your own capital");
         }
         // Prerequisite mirrors (same messages as TurnProcessor resolve).
         var n = ctx.Nation;
@@ -983,12 +997,11 @@ public class OrdersController : ControllerBase
             if (army == null) errors.Add("No army to transfer command of");
             var t = FC(S("targetId"));
             if (S("targetId") != null && t == null) errors.Add("Target commander not found");
-            else
+            else if (t != null)
             {
                 if (t.NationId != n.Id) errors.Add("New commander must be of the same nation");
                 if (t.CommandSkill <= 0) errors.Add("New commander needs command skill");
             }
-            if (!atCapital) errors.Add("Must be at your own capital");
         }
         if (code == 785)
         {
