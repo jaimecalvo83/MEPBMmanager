@@ -1355,7 +1355,7 @@ public class GamesController : ControllerBase
                 c.HeldByNationId,
                 c.CompanyId,
                 c.ArmyId,
-                artifacts = c.Artifacts.Select(a => new { a.Id, a.Name, a.Type, a.Bonus, a.Alignment }),
+                artifacts = c.Artifacts.Select(a => new { a.Id, a.Name, a.Type, a.Bonus, a.Alignment, a.LocationHex, a.NationId }),
                 spells = c.Spells.Where(s => s.IsKnown).Select(s => new
                 {
                     s.SpellId,

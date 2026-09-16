@@ -700,7 +700,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
           )}
 
           {activeTab === 'characters' && (
-            <CharactersTab characters={characters} armies={armies} populationCentres={populationCentres} nationName={nation?.name} />
+            <CharactersTab characters={characters} armies={armies} populationCentres={populationCentres} nationName={nation?.name} nations={nations} />
           )}
 
           {activeTab === 'orders' && (
@@ -1226,7 +1226,11 @@ function Tip({ trigger, children }: { trigger: React.ReactNode; children: React.
   );
 }
 
-function ArtifactChip({ a }: { a: any }) {
+function ArtifactChip({ a, holder, nationName }: { a: any; holder: string; nationName?: string }) {
+  const type = a.type ?? a.Type;
+  const bonus = a.bonus ?? a.Bonus ?? 0;
+  const alignment = a.alignment ?? a.Alignment;
+  const loc = a.locationHex ?? a.LocationHex;
   return (
     <Tip
       trigger={
@@ -1236,11 +1240,12 @@ function ArtifactChip({ a }: { a: any }) {
       }
     >
       <span className="block text-amber-200 font-bold text-sm">{a.name ?? a.Name ?? 'Artifact'}</span>
-      {(a.type ?? a.Type) && <span className="block text-xs text-gray-400 mt-0.5">{a.type ?? a.Type}</span>}
-      <span className="block text-sm text-gray-200 mt-1">
-        Bonus +{a.bonus ?? a.Bonus ?? 0}
-        {((a.alignment ?? a.Alignment) && (a.alignment ?? a.Alignment) !== 'none') ? ` · ${(a.alignment ?? a.Alignment)}` : ''}
-      </span>
+      {type && <span className="block text-xs text-gray-400 mt-0.5">{type}</span>}
+      <span className="block text-sm text-gray-200 mt-1">Bonus +{bonus}</span>
+      {alignment && <span className="block text-sm text-gray-200">Alignment: {alignment}</span>}
+      {loc && <span className="block text-sm text-gray-200">Location: {loc}</span>}
+      {nationName && <span className="block text-sm text-gray-200">Nation: {nationName}</span>}
+      <span className="block text-sm text-gray-200">Held by: {holder}</span>
     </Tip>
   );
 }
@@ -1274,8 +1279,8 @@ function StatBox({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function CharactersTab({ characters, armies, populationCentres, nationName }: {
-  characters: any[]; armies: any[]; populationCentres: any[]; nationName?: string;
+function CharactersTab({ characters, armies, populationCentres, nationName, nations }: {
+  characters: any[]; armies: any[]; populationCentres: any[]; nationName?: string; nations?: any[];
 }) {
   if (characters.length === 0) {
     return <div className="text-gray-400">No characters visible.</div>;
@@ -1283,6 +1288,8 @@ function CharactersTab({ characters, armies, populationCentres, nationName }: {
 
   const armyById = new Map<string, any>();
   for (const a of armies) armyById.set(a.id, a);
+  const nationById = new Map<string, string>();
+  for (const n of nations ?? []) nationById.set(n.id, n.name);
 
   const typeColor: Record<string, string> = {
     commander: 'bg-blue-600',
@@ -1338,7 +1345,14 @@ function CharactersTab({ characters, armies, populationCentres, nationName }: {
               </div>
               {artifacts.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {artifacts.map((a: any) => <ArtifactChip key={a.id ?? a.Id ?? a.name} a={a} />)}
+                  {artifacts.map((a: any) => (
+                    <ArtifactChip
+                      key={a.id ?? a.Id ?? a.name}
+                      a={a}
+                      holder={char.name}
+                      nationName={nationById.get(a.nationId ?? a.NationId)}
+                    />
+                  ))}
                 </div>
               ) : (
                 <p className="text-sm text-gray-500">—</p>
