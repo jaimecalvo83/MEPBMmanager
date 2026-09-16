@@ -4,6 +4,12 @@ using MEPBMmanager.Domain.Entities;
 using MEPBMmanager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
+// NOTA ARQUITECTURA (ver ARCHITECTURE.md en la raíz):
+// Este fichero es un god object histórico (~4600 líneas): resolución de turno,
+// economía, combate, magia, personajes, rehenes, mercado y movimiento.
+// Siguiente paso: partirlo en partials por dominio
+// (TurnProcessor.Economy/Combat/Magic/Characters...). Mientras tanto,
+// NO añadas más dominios aquí: crea el partial correspondiente.
 namespace MEPBMmanager.Api.Services;
 
 public class TurnProcessor
