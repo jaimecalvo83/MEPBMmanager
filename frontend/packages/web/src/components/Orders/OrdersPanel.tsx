@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOrders, useSubmitOrder, useCancelOrder, useValidateOrders, useEligibleOrders, useOrderEstimate, OrderFieldSpec } from '../../hooks/useOrders';
 import { ORDER_DEFINITIONS } from '@MEPBMmanager/shared';
 import { ORDER_SCHEMAS } from './orderSchemas';
+import { OrderInfoTip } from './OrderInfoTip';
 import SearchSelect from './SearchSelect';
 import { useQueryClient } from 'react-query';
 
@@ -217,6 +218,11 @@ function OrderComposer({
         }}
         placeholder="Select order…"
       />
+      {orderCode > 0 && (
+        <div className="text-sm">
+          <OrderInfoTip code={orderCode} requires={est?.requires} costs={est?.costs} expectedGold={est?.expectedGold} maxAmount={est?.maxAmount} />
+        </div>
+      )}
       {schema?.help && orderCode > 0 && (
         <p className="text-xs text-gray-400 italic">{schema.help}</p>
       )}
@@ -284,7 +290,6 @@ function CharacterOrderCard({
   onChanged: () => void;
 }) {
   const queryClient = useQueryClient();
-  const cancelOrder = useCancelOrder(gameId);
 
   const afterOrder = pending.length === 1
     ? { code: pending[0].code, parameters: parseParams(pending[0].parameters) }
@@ -313,33 +318,19 @@ function CharacterOrderCard({
 
       {pending.length >= 1 && (
         <div className="mb-3 space-y-2">
-          {pending.map((o, i) => {
-            const def = ORDER_DEFINITIONS.find((d) => d.code === o.code);
-            return (
-              <div key={o.id} className="flex items-center justify-between bg-gray-700 px-3 py-2 rounded text-sm">
-                <span>
-                  <span className="text-gray-400">{i === 0 ? '1st' : '2nd'}: </span>
-                  <span className="text-mepbm-gold">[{o.code}] {def?.name ?? ''}</span>
-                  {' '}
-                  <span className="text-gray-400">{typeof o.parameters === 'string' ? o.parameters : JSON.stringify(o.parameters)}</span>
-                  {o.status !== 'pending' && <span className="ml-2 text-xs text-gray-500">({o.status})</span>}
-                </span>
-                {o.status === 'pending' && (
-                  <button
-                    onClick={async () => {
-                      await cancelOrder.mutateAsync(o.id);
-                      queryClient.invalidateQueries(['order-estimate', gameId]);
-                      onChanged();
-                    }}
-                    disabled={cancelOrder.isLoading}
-                    className="text-red-400 hover:text-red-300 text-xs disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            );
-          })}
+          {pending.map((o, i) => (
+            <PendingOrderLine
+              key={o.id}
+              gameId={gameId}
+              characterId={character.id}
+              order={o}
+              index={i}
+              onChanged={() => {
+                queryClient.invalidateQueries(['order-estimate', gameId]);
+                onChanged();
+              }}
+            />
+          ))}
         </div>
       )}
 
@@ -355,6 +346,71 @@ function CharacterOrderCard({
 
       {pending.length >= 2 && (
         <p className="text-yellow-400 text-sm">Two orders submitted. Cancel one to change it.</p>
+      )}
+    </div>
+  );
+}
+
+function humanParamValue(f: OrderFieldSpec, v: unknown): string {
+  if (f.kind === 'select') {
+    const o = (f.options ?? []).find((o) => o.value === String(v));
+    return o ? o.label : String(v);
+  }
+  if (f.kind === 'multiselect' && Array.isArray(v)) {
+    return v.map((x) => (f.options ?? []).find((o) => o.value === String(x))?.label ?? String(x)).join(', ');
+  }
+  if (typeof v === 'boolean') return v ? 'yes' : 'no';
+  return String(v);
+}
+
+function describeParams(stored: Record<string, unknown>, requires?: OrderFieldSpec[] | null): string {
+  if (!requires) return JSON.stringify(stored);
+  const parts: string[] = [];
+  for (const f of requires) {
+    const v = stored[f.key];
+    if (v === undefined || v === null || v === '') continue;
+    parts.push(`${f.label}: ${humanParamValue(f, v)}`);
+  }
+  return parts.length > 0 ? parts.join(' · ') : JSON.stringify(stored);
+}
+
+function PendingOrderLine({ gameId, characterId, order, index, onChanged }: {
+  gameId: string;
+  characterId: string;
+  order: { id: string; code: number; parameters: unknown; status: string };
+  index: number;
+  onChanged: () => void;
+}) {
+  const cancelOrder = useCancelOrder(gameId);
+  const stored = parseParams(order.parameters);
+  const paramsKey = JSON.stringify(stored);
+  const est = useOrderEstimate(gameId, characterId, order.code, paramsKey, 'none', () => ({ parameters: stored }));
+  return (
+    <div className="flex items-center justify-between bg-gray-700 px-3 py-2 rounded text-sm">
+      <span>
+        <span className="text-gray-400">{index === 0 ? '1st' : '2nd'}: </span>
+        <OrderInfoTip
+          code={order.code}
+          requires={est.data?.requires}
+          costs={est.data?.costs}
+          expectedGold={est.data?.expectedGold}
+          maxAmount={est.data?.maxAmount}
+        />
+        {' '}
+        <span className="text-gray-400">{describeParams(stored, est.data?.requires)}</span>
+        {order.status !== 'pending' && <span className="ml-2 text-xs text-gray-500">({order.status})</span>}
+      </span>
+      {order.status === 'pending' && (
+        <button
+          onClick={async () => {
+            await cancelOrder.mutateAsync(order.id);
+            onChanged();
+          }}
+          disabled={cancelOrder.isLoading}
+          className="text-red-400 hover:text-red-300 text-xs disabled:opacity-50"
+        >
+          Cancel
+        </button>
       )}
     </div>
   );
