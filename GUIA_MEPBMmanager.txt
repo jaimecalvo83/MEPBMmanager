@@ -1,0 +1,208 @@
+================================================================================
+ MEPBMmanager — GUÍA COMPLETA Y ESTADO ACTUAL
+ Módulo Third Age 2950 + sistema de órdenes + ES/EN
+ Actualizado: 2026-09-16 · Rama master (GitHub: jaimecalvo83/MEPBMmanager)
+================================================================================
+
+1. QUÉ ES
+--------------------------------------------------------------------------------
+Gestor web de partidas play-by-mail de Middle-earth (MEPBM), módulo 2950.
+- Backend: .NET 10 (API en puerto 5171).
+- Frontend: React + Vite (puerto 80 vía nginx).
+- Postgres (5432), Redis (6379, sin uso real).
+- Todo corre con Docker Compose desde la carpeta frontend/.
+
+2. ARRANQUE Y OPERATIVA
+--------------------------------------------------------------------------------
+  cd frontend
+  docker compose build backend web        (web casi siempre; backend si cambió C#)
+  docker compose up -d --force-recreate backend web
+  API: http://localhost:5171/api/games  (401 sin token = OK, está vivo)
+  Web: http://localhost:80
+
+IMPORTANTE:
+- El JSON maestro va DENTRO de la imagen backend:
+  backend/MEPBMmanager.Api/Data/map2950_initial.json
+  (espejo en frontend/packages/shared/src/constants/map2950_initial.json;
+  mantenerlos idénticos). Tras editarlo: build --no-cache + up --force-recreate
+  y verificar contenido, no fiarse del "Built".
+- Las migraciones de base de datos se aplican solas al arrancar el backend.
+- En PowerShell no usar comillas problemáticas en SQL: escribir el .sql en
+  C:\Users\Iratxe\AppData\Local\Temp\opencode\ y pasarlo con:
+    docker cp <fich> mepbm-postgres:/tmp/q.sql
+    docker exec mepbm-postgres psql -U postgres -d mepbm -t -A -F "|" -f /tmp/q.sql
+- Login API: POST /api/auth/login {email,password} -> {token, user}.
+- Usuarios: admin@admin.com / admin123 (test_admin, ve y opera todo);
+  alice..jack (*pass1), tina, p01..p14. El staff puede dar órdenes con
+  personajes de cualquier nación.
+
+3. PARTIDAS Y MÓDULO 2950
+--------------------------------------------------------------------------------
+- 25 naciones reales del módulo + Corsairs como neutral.
+- 4 partidas vivas (Game 299 = Partida 25 completa):
+  Partida 25  6da926f5-87fc-4674-a3b1-7c77dd8d3b48  1716 hex (mapa completo)
+  Partida 10  d2c5ab32-2bc4-4937-8b20-e5355994cd07   500 hex (plantilla 6-10)
+  Partida 15  0a8e74bb-f78b-4806-8e0a-21de35252aa1   896 hex (plantilla 11-15)
+  Partida 20  3ec2b88b-334f-42db-9342-da3152e2c64d  1330 hex (plantilla 16-20)
+  Las pequeñas usan plantillas fijas + PNJs (1→1N, 2→2N, 3→1F+1D+1N,
+  4→1F+1D+2N) y recorte de mapa.
+- Khand integrada con datos reales de turno 0 (Game 299): stats, centros,
+  hechizos con rango, mandos, artefactos y capital Sturlurtsa Khand (41,33).
+- Flujo: setup (invitar, aceptar, asignar) → turnos orders_open →
+  Process Turn → informes. Ciudades con 8 recursos (Prod/Stores).
+  El oro de ciudad = producción + impuesto (tamaño×tasa).
+- Victoria: VictoryPoints por nación (no acumulativos) + WarshipStrength,
+  pestaña Standings por bandos. Derrotar capital / eliminar: las eliminadas
+  salen pero no ganan.
+
+4. SISTEMA DE ÓRDENES (el corazón)
+--------------------------------------------------------------------------------
+- 142 definiciones de orden; el dispatcher resuelve ~140. Faltan 960/965
+  (genéricas) y hay STUBs (357, 942, 947, 948, 990, 580/585 solo por TXT).
+- Endpoints (todo con ?lang=es para español):
+    GET    /games/{id}/orders/eligible?characterId=..  → qué puede hacer
+    POST   /games/{id}/orders/estimate                 → formulario + costes en vivo
+    POST   /games/{id}/orders                          → enviar (máx 2 por pj y turno)
+    DELETE /games/{id}/orders/{orderId}                → cancelar pendiente
+    GET    /games/{id}/orders                          → listado (ordenado por código)
+    POST   /games/{id}/orders/validate                 → validar pendientes
+- Elegibilidad (no se ofrece lo que no cumples): skills, estar en ejército /
+  compañía / armada, capital, PC propia, tierra, artefacto en mano, hechizo
+  conocido, marina nacional. La restricción 'cap' = capital (se corrigió:
+  pedía campeón).
+- Estimate: por cada orden pide SOLO su "Required Information" (campos con
+  opciones cribadas: pjs del mismo hex, comandantes con fuerza, artefactos
+  por tipo, PCs, ejércitos, naciones, hechizos conocidos...). Los hechizos
+  de lore (940) criban la diana según hechizo (personaje, comandante,
+  nación, bando, artefacto o hex). Curar (120) solo ofrece pjs del hex.
+  Investigar (705) solo lista hechizos investigables.
+- Costes en vivo + máximo (oro, comida, monturas, materiales, topes de
+  recluta/capacidad/mercado). Claves traducidas con lang.
+- Conflictos cruzados: topes de recluta por PC, doble agente, desafíos
+  (gana el CR mayor), sobornos, artefactos movidos, tope de venta.
+- La 2ª orden se condiciona a la 1ª (ubicación efectiva tras mover).
+- La fuerza se deriva del personaje (sin selectores army/navy): la orden
+  guarda snapshot del ejército; en el resolve, ejército del personaje y
+  como legado la primera de la nación. Destino (destArmyId) sí se elige.
+- Submit directo por API no valida (valida el front + el resolve falla con
+  mensaje). Validate-All solo mira muerto/secuestrado (superficial, ver §8).
+
+5. REGLAS IMPLEMENTADAS (fuente: wiki.mepbm.com + PDFs turno 0)
+--------------------------------------------------------------------------------
+- Tropas (6 tipos) con training/arma/armadura POR TIPO. Reclutar promedia el
+  training de la agrupación. Rangos: armas madera 10 / bronce 30 / acero 60 /
+  mitril 100; armaduras 0 / cuero 10 / bronce 30 / acero 60 / mitril 100.
+- Comida/turno: HC×2, LC×2, resto×1. Oro/turno: HC6 LC3 HI4 LI2 AR2 MA1.
+  Consume primero el tren, luego la reserva; hambre = -10 moral.
+- Combate: Strength/Constitution base (HC 16/16, LC 8/8, HI 10/10, LI 5/5,
+  AR 6/2, MA 2/2), mejor/peor táctica por tipo, modificadores de terreno,
+  moral, training, armas, comandante, clima, hechizos, artefactos.
+  La táctica sale de la orden de ataque (230/235/240/250/255); sin táctica
+  es neutra (100%, sin bonus). El defensor siempre va sin táctica.
+  Hechizos de combate con valores de la wiki (104 Resistances = 750).
+- Magia: 71 hechizos con colegio, dificultad, orden de casteo,
+  prerequisitos, info requerida y efecto completo. Perdidos: 244/246/248
+  (combate, solo Sirvientes) + 502/504/508/510/512 (invocación).
+  Curar necesita mismo hex; lore revela según hechizo (pjs, comandantes,
+  naciones, bandos, artefactos, hex); 940 ignora dianas ajenas al hechizo.
+- Artefactos: catálogo wiki de 213 (número + beneficio + poder). Tipos de
+  combate/movimiento (Boots)/scry (Mirror,Orb,Sphere)/ocultación
+  (Cloak,Robes) + alineamiento bueno/malo. Anillo #14: orden 990 solo en
+  34,23, en solitario y no neutral.
+- Centros: tamaños (camp 100 … city 500 reclutas), lealtad, producción,
+  puertos/fondeaderos, fuertes (tower→citadel), ocultos/asediados.
+- Economía: impuestos por tamaño×tasa, upkeep (tropas, puertos, barcos,
+  fuertes, pjs), mercado (compra con pool, tope de venta 20000 oro/turno),
+  producción base por turno.
+- Personajes: skills C/A/E/M, sigilo, desafío, salud, rehenes (secuestrar,
+  custodiar, interrogar, rescatar, liberar, ejecutar, rescate, mover),
+  compañías (máx 9), comandantes, campeones. Doble agente (500, uno por
+  nación), sobornos (505, recluta o espía con intel).
+- Rehenes y transferencias mismo hex y bando amigo. Fundar compañías (500
+  oro, en tierra, sin mandar fuerza). Nombrar personajes en capital
+  (10000 la multi 725, 5000 resto; 5-17 letras). Mover capital (25000,
+  major town/ciudad, sin asedio). Fogatas/campamentos (2000/4000, en tierra
+  sin enemigo ni PC propia).
+
+6. FRONTEND
+--------------------------------------------------------------------------------
+Pestañas: Nación, Mapa (leyenda + hex clicable), Ciudades, Ejércitos,
+Personajes, Órdenes, Mensajes, Relaciones (solo lectura; se cambian con
+180/185), Informes, Standings.
+- Tarjetas espaciosas por secciones; tooltips cuadrados con toda la info
+  en órdenes (título, tipo, dificultad, prerrequisitos, info requerida,
+  descripción), tropas (Str/Con, consumo, tácticas, terreno, equipo),
+  hechizos (colegio, dificultad, efecto, prerequisitos, rangos) y
+  artefactos (#, beneficio, poder, tipo, bonus, alineamiento, lugar,
+  nación, portador).
+- Desplegables con buscador; tooltip flotante en el selector de órdenes.
+- Listas siempre ordenadas por número.
+- i18n EN (defecto) + ES con selector (se guarda en navegador). Traducido:
+  toda la interfaz, 141 órdenes (nombre/descripción/ayuda), 71 hechizos,
+  213 artefactos, 25 naciones, tipos/tamaños/fuertes/estaciones/estados/
+  terrenos/bandos, etiquetas/errores/costes del backend (?lang=es).
+  Quedan en inglés: informes ya procesados (histórico), nombres propios
+  de pjs/PCs, resultados del resolve y habilidades en modo EN (ver §8).
+
+7. AUDITORÍA (bugs reales ya corregidos)
+--------------------------------------------------------------------------------
+104 Resistances pegaba 100 (es 750) · 340/345 sin campo amount · 'cap'
+pedía campeón en vez de capital (bloqueaba la 325) · 240/250/255/260 sin
+táctica opcional · 500 validaba targetNationId inexistente (siempre fallaba)
+· 785 fallaba siempre · 347 pedía destArmyId que el resolve no leía · 660
+sin amount · auto = primera armada en vez de la del personaje · 205/805/
+935/945 sin tipo/alineamiento · 990 pedía capital (es 34,23 en solitario) ·
+780 pedía capital de más · duplicados en RequiresFor · NRE en 610 sin
+target · hex decorativos que el resolve ignora (520/525/530/535/550) ·
+AsSplitQuery por timeouts · JWT: la clave persiste reinicios · nginx sin
+caché para index.html (assets con hash a 1 año).
+
+8. PENDIENTE / LIMITACIONES CONOCIDAS
+--------------------------------------------------------------------------------
+[Orden] 330 trata todo como oro: 502/504/506 dañan pjs (con diana) y
+  508/510/512 conjuran monturas/comida/tropas. Falta resolve + formulario.
+[Orden] 416 fiel imposible sin producción por hex (cae a scry genérico).
+[Orden] 370/375 y 444/448 deberían usar equipo DEL TREN (usan stock nacional).
+[Regla] Aprovisionamiento de PCs amigas (la PC alimenta primero hasta su
+  tope) no modelado: el tren va primero y luego la reserva.
+[Regla] Disolver ejército con <100 tropas o comandante muerto sin relevo.
+[Regla] Arqueros empiezan con armas de acero (sabor, sin efecto).
+[Regla] 'without' como auto-pass en elegibilidad (lo cubre el estimate).
+[Front] Validate-All superficial (solo muerto/secuestrado).
+[Front] Submit directo por API no valida (valida front + resolve).
+[Front] TacticOptions muestra códigos (ch/su/fl…).
+[Front] Scouts (910/915/925/930) con tirada simplificada.
+[Orden] 580/585 solo por TXT. STUBs: 357, 942, 947, 948, 960, 965, 990.
+[Datos] Habilidades de nación en EN dentro de DisplayNamesEn (ES primero).
+[Infra] Sin suite de tests: verificación manual por API (ver §9).
+[Infra] Redis desplegado sin uso.
+
+9. VERIFICACIÓN RÁPIDA (ejemplos reales usados)
+--------------------------------------------------------------------------------
+- estimate 370 sin tipos → "Specify troops per type"; con hc=5 → ok, 500 oro.
+- 940+404 → solo nación; 406 → comandantes (64); 416 → PC; 410+bando → ok.
+- 500 a propia nación → error; 505 a otro hex → error con hex real.
+- 780 sin ejército → "No army..."; 280 sin armada → "No navy".
+- ?lang=es: etiquetas/errores/costes en español (oro, bronce...).
+- Elegibilidad: 325 en capital ok; fuera → "Must be at your own capital".
+- Submit guarda ArmyId del personaje; state trae wikiId Ranuras Es.
+- Informes ?lang=es con claves de sección.
+
+10. FICHEROS CLAVE
+--------------------------------------------------------------------------------
+Backend : Api/Controllers/{Orders,Games}Controller.cs · Api/Services/
+  {TurnProcessor,CombatResolver,SpellCatalog,MovementResolver,Map2950Seeder,
+  TurnReportService}.cs · Domain/{Entities,Constants/*,Enums} ·
+  Infrastructure/Migrations · Api/Data/map2950_initial.json
+Front   : web/src/components/{GameView,NationPicker,Messages,Map,Orders,
+  Dashboard,Auth} · web/src/i18n/lang.tsx · web/src/api/client.ts ·
+  web/src/hooks · shared/{constants/{orders,orders.es,spells,troops},
+  types} · web/nginx.conf (+anti-caché index.html)
+Raíz    : ordenes_estado.txt · rumores_580_585.txt · wiki_req.txt · este fichero.
+================================================================================
+ DUDAS FRECUENTES
+ - ¿Veo inglés con ES activado? Recarga fuerte (Ctrl+Mayús+R) una vez.
+ - ¿Costes raros en 370? Revisa material (bronce=30, cuero=10).
+ - ¿Una orden no sale? Mira elegibilidad: ejército, capital, PC, tierra,
+   artefacto en mano o hechizo conocido según tooltip de prerrequisitos.
+================================================================================
