@@ -1355,7 +1355,10 @@ public class GamesController : ControllerBase
                 c.HeldByNationId,
                 c.CompanyId,
                 c.ArmyId,
-                artifacts = c.Artifacts.Select(a => new { a.Id, a.Name, a.Type, a.Bonus, a.Alignment, a.LocationHex, a.NationId }),
+                artifacts = c.Artifacts.Select(a => new { a.Id, a.Name, a.Type, a.Bonus, a.Alignment, a.LocationHex, a.NationId,
+                    wikiId = ArtifactCatalog2950.Find(a.Name)?.Id,
+                    primaryBenefit = ArtifactCatalog2950.Find(a.Name)?.Primary,
+                    secondaryPower = ArtifactCatalog2950.Find(a.Name)?.Secondary }),
                 spells = c.Spells.Where(s => s.IsKnown).Select(s => new
                 {
                     s.SpellId,

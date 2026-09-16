@@ -1231,16 +1231,21 @@ function ArtifactChip({ a, holder, nationName }: { a: any; holder: string; natio
   const bonus = a.bonus ?? a.Bonus ?? 0;
   const alignment = a.alignment ?? a.Alignment;
   const loc = a.locationHex ?? a.LocationHex;
+  const wikiId = a.wikiId ?? a.WikiId;
+  const primary = a.primaryBenefit ?? a.PrimaryBenefit;
+  const secondary = a.secondaryPower ?? a.SecondaryPower;
   return (
     <Tip
       trigger={
         <span className="inline-block px-2 py-1 rounded bg-gray-700 border border-amber-600/60 text-xs text-amber-200">
-          {a.name ?? a.Name ?? '?'}
+          {wikiId ? `#${wikiId} ` : ''}{a.name ?? a.Name ?? '?'}
         </span>
       }
     >
-      <span className="block text-amber-200 font-bold text-sm">{a.name ?? a.Name ?? 'Artifact'}</span>
+      <span className="block text-amber-200 font-bold text-sm">{wikiId ? `#${wikiId} ` : ''}{a.name ?? a.Name ?? 'Artifact'}</span>
       {type && <span className="block text-xs text-gray-400 mt-0.5">{type}</span>}
+      {primary && <span className="block text-sm text-gray-200 mt-1">{primary}</span>}
+      {secondary && secondary !== '-' && <span className="block text-sm text-gray-200">{secondary}</span>}
       <span className="block text-sm text-gray-200 mt-1">Bonus +{bonus}</span>
       {alignment && <span className="block text-sm text-gray-200">Alignment: {alignment}</span>}
       {loc && <span className="block text-sm text-gray-200">Location: {loc}</span>}
