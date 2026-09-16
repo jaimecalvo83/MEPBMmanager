@@ -16,24 +16,9 @@ interface Character {
   locationHex: string;
 }
 
-interface Army {
-  id: string;
-  name: string;
-  locationHex: string;
-}
-
-interface Navy {
-  id: string;
-  locationHex: string;
-  warships: number;
-  transports: number;
-}
-
 interface OrdersPanelProps {
   gameId: string;
   characters: Character[];
-  armies: Army[];
-  navies: Navy[];
 }
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
@@ -58,16 +43,12 @@ function parseParams(raw: unknown): Record<string, unknown> {
 function OrderComposer({
   gameId,
   character,
-  armies,
-  navies,
   afterOrder,
   slotLabel,
   onSubmitted,
 }: {
   gameId: string;
   character: Character;
-  armies: Army[];
-  navies: Navy[];
   afterOrder?: { code: number; parameters: Record<string, unknown> };
   slotLabel: string;
   onSubmitted: () => void;
@@ -76,8 +57,6 @@ function OrderComposer({
   const submitOrder = useSubmitOrder(gameId);
   const [orderCode, setOrderCode] = useState<number>(0);
   const [params, setParams] = useState<Record<string, unknown>>({});
-  const [armyId, setArmyId] = useState<string>('');
-  const [navyId, setNavyId] = useState<string>('');
 
   const { data: eligible, isError: eligError, error: eligErrDetail } = useEligibleOrders(gameId, character.id);
   const eligibleSet = useMemo(() => new Set((eligible ?? []).filter((e) => e.ok).map((e) => e.code)), [eligible]);
@@ -93,8 +72,6 @@ function OrderComposer({
   const afterKey = afterOrder ? JSON.stringify(afterOrder) : 'none';
   const estimate = useOrderEstimate(gameId, character.id, orderCode, paramsKey, afterKey, () => ({
     parameters: JSON.parse(paramsKey),
-    ...(armyId ? { armyId } : {}),
-    ...(navyId ? { navyId } : {}),
     ...(afterOrder ? { afterOrder } : {}),
   }));
 
@@ -117,7 +94,6 @@ function OrderComposer({
       characterId: character.id,
       code: orderCode,
       parameters: JSON.parse(JSON.stringify(params)),
-      ...(armyId ? { armyId } : {}),
     });
     setOrderCode(0);
     setParams({});
@@ -245,29 +221,6 @@ function OrderComposer({
         <p className="text-xs text-gray-400 italic">{schema.help}</p>
       )}
 
-      {orderCode > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Army (optional context)</label>
-            <SearchSelect
-              value={armyId}
-              options={armies.map((a) => ({ value: a.id, label: `${a.name} @ ${a.locationHex}` }))}
-              onChange={setArmyId}
-              placeholder="Default"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Navy (optional context)</label>
-            <SearchSelect
-              value={navyId}
-              options={navies.map((v) => ({ value: v.id, label: `Navy @ ${v.locationHex} (${v.warships}W/${v.transports}T)` }))}
-              onChange={setNavyId}
-              placeholder="Default"
-            />
-          </div>
-        </div>
-      )}
-
       {orderCode > 0 && estimate.isLoading && (
         <p className="text-gray-500 text-sm">Loading order info…</p>
       )}
@@ -322,15 +275,11 @@ function OrderComposer({
 function CharacterOrderCard({
   gameId,
   character,
-  armies,
-  navies,
   pending,
   onChanged,
 }: {
   gameId: string;
   character: Character;
-  armies: Army[];
-  navies: Navy[];
   pending: Array<{ id: string; code: number; parameters: unknown; status: string }>;
   onChanged: () => void;
 }) {
@@ -357,8 +306,6 @@ function CharacterOrderCard({
         <OrderComposer
           gameId={gameId}
           character={character}
-          armies={armies}
-          navies={navies}
           slotLabel="1st order"
           onSubmitted={onChanged}
         />
@@ -400,8 +347,6 @@ function CharacterOrderCard({
         <OrderComposer
           gameId={gameId}
           character={character}
-          armies={armies}
-          navies={navies}
           afterOrder={afterOrder}
           slotLabel="2nd order (conditioned by the 1st)"
           onSubmitted={onChanged}
@@ -415,7 +360,7 @@ function CharacterOrderCard({
   );
 }
 
-export default function OrdersPanel({ gameId, characters, armies, navies }: OrdersPanelProps) {
+export default function OrdersPanel({ gameId, characters }: OrdersPanelProps) {
   const queryClient = useQueryClient();
   const { data: orders } = useOrders(gameId);
   const validateOrders = useValidateOrders(gameId);
@@ -444,8 +389,6 @@ export default function OrdersPanel({ gameId, characters, armies, navies }: Orde
             key={c.id}
             gameId={gameId}
             character={c}
-            armies={armies}
-            navies={navies}
             pending={(orders ?? []).filter((o) => o.characterId === c.id && o.status === 'pending')}
             onChanged={() => {
               queryClient.invalidateQueries(['orders', gameId]);

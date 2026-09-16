@@ -101,8 +101,10 @@ public class OrdersController : ControllerBase
             TurnId = currentTurn.Id,
             NationId = nationId,
             CharacterId = request.CharacterId,
-            ArmyId = request.ArmyId,
-            NavyId = request.NavyId,
+            ArmyId = request.ArmyId ?? character.ArmyId,
+            NavyId = request.NavyId ?? (request.Code == 830 ? await _db.Navies
+                .Where(v => v.NationId == nationId && v.CommanderId == character.Id)
+                .Select(v => v.Id).FirstOrDefaultAsync() : null),
             Code = request.Code,
             Parameters = request.Parameters.HasValue ? request.Parameters.Value.GetRawText() : "{}",
             Status = "pending"
@@ -233,6 +235,30 @@ public class OrdersController : ControllerBase
     {
         if (ch.IsDead || ch.IsKidnapped) return (false, "Character cannot act");
         if (def.Code == 100) return (false, "Automatic order");
+        // Prerrequisitos de estado: van antes que las restricciones de tipo,
+        // aplican a todas las órdenes.
+        var need0 = def.Code switch
+        {
+            205 => ch.Artifacts.Any(a => a.HeldByCharacterId == ch.Id && TurnProcessor.CombatArtifactTypes.Contains(a.Type ?? "")) ? "" : "No combat artifact held",
+            360 or 792 => ch.Artifacts.Any(a => a.HeldByCharacterId == ch.Id) ? "" : "No artifact held",
+            750 or 760 => ch.CompanyId != null ? "" : "Not in a company",
+            790 => ch.ArmyId != null ? "" : "Not in an army",
+            120 => HasSpellType(ch, SpellType.Heal) ? "" : "No healing spell known",
+            225 => HasSpellType(ch, SpellType.Combat) ? "" : "No combat spell known",
+            330 => HasSpellType(ch, SpellType.Conjuring) ? "" : "No conjuring spell known",
+            825 => HasSpellType(ch, SpellType.Movement) ? "" : "No movement spell known",
+            940 => HasSpellType(ch, SpellType.Lore) ? "" : "No lore spell known",
+            _ => ""
+        };
+        if (need0 != "") return (false, need0);
+        var armyNeeded = new HashSet<int> { 230, 235, 240, 250, 255, 260, 340, 345, 347, 349, 351, 353, 355, 370, 375, 400, 404, 408, 412, 416, 420, 425, 430, 435, 440, 444, 448, 765, 775, 780, 840, 850, 860 };
+        if (armyNeeded.Contains(def.Code) && ch.ArmyId == null)
+            return (false, "Not in an army");
+        var navyNeeded = new HashSet<int> { 270, 275, 280, 830, 794, 798 };
+        if (navyNeeded.Contains(def.Code) && (nation == null || nation.Navies.Count == 0))
+            return (false, "No navy available");
+        if (def.Code == 830 && !commandsNavy)
+            return (false, "Must command a navy");
         var r = def.Restrictions;
         if (r.Length == 0 || r.Contains("without")) return (true, "");
         var type = (ch.Type ?? "").ToLower();
@@ -252,27 +278,6 @@ public class OrdersController : ControllerBase
                 case "fa": return (false, "Fourth Age only");
             }
         }
-        // Prerrequisitos de estado por orden (los baratos de comprobar aquí)
-        var need = def.Code switch
-        {
-            205 => ch.Artifacts.Any(a => a.HeldByCharacterId == ch.Id && TurnProcessor.CombatArtifactTypes.Contains(a.Type ?? "")) ? "" : "No combat artifact held",
-            360 or 792 => ch.Artifacts.Any(a => a.HeldByCharacterId == ch.Id) ? "" : "No artifact held",
-            750 or 760 => ch.CompanyId != null ? "" : "Not in a company",
-            790 => ch.ArmyId != null ? "" : "Not in an army",
-            120 => HasSpellType(ch, SpellType.Heal) ? "" : "No healing spell known",
-            225 => HasSpellType(ch, SpellType.Combat) ? "" : "No combat spell known",
-            330 => HasSpellType(ch, SpellType.Conjuring) ? "" : "No conjuring spell known",
-            825 => HasSpellType(ch, SpellType.Movement) ? "" : "No movement spell known",
-            940 => HasSpellType(ch, SpellType.Lore) ? "" : "No lore spell known",
-            _ => ""
-        };
-        if (need != "") return (false, need);
-        var armyNeeded = new HashSet<int> { 230, 235, 240, 250, 255, 260, 340, 345, 347, 349, 351, 353, 355, 370, 375, 400, 404, 408, 412, 416, 420, 425, 430, 435, 440, 444, 448, 452, 456, 765, 775, 850, 860 };
-        if (armyNeeded.Contains(def.Code) && ch.ArmyId == null && (nation == null || nation.Armies.Count == 0))
-            return (false, "No army available");
-        var navyNeeded = new HashSet<int> { 270, 275, 280, 830, 794, 798 };
-        if (navyNeeded.Contains(def.Code) && (nation == null || nation.Navies.Count == 0))
-            return (false, "No navy available");
         return (false, "Requires " + string.Join("/", r));
     }
 
@@ -395,15 +400,14 @@ public class OrdersController : ControllerBase
             return nation.Armies.FirstOrDefault(a => a.Id == armyId);
         if (!string.IsNullOrEmpty(ch.ArmyId))
             return nation.Armies.FirstOrDefault(a => a.Id == ch.ArmyId);
-        return nation.Armies.FirstOrDefault();
+        return null;
     }
 
     private Navy? ResolveEstimateNavy(string? navyId, Character ch, Nation nation)
     {
         if (!string.IsNullOrEmpty(navyId))
             return nation.Navies.FirstOrDefault(v => v.Id == navyId);
-        return nation.Navies.FirstOrDefault(v => v.CommanderId == ch.Id)
-            ?? nation.Navies.FirstOrDefault();
+        return nation.Navies.FirstOrDefault(v => v.CommanderId == ch.Id);
     }
 
     private static int ParamInt(Dictionary<string, System.Text.Json.JsonElement> pars, string key, int def = 0)
@@ -525,7 +529,6 @@ public class OrdersController : ControllerBase
                 Sel("armour", "Armour", MaterialOptions), Num("food", "Food units", req: false, min: 0) },
             755 => new() { Sel("commanderId", "Company commander", CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => c.CompanyId != null && !c.IsDead))) },
             765 => new() { Sel("commanderId", "New commander", CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => c.NationId == ctx.Nation.Id && c.CommandSkill > 0 && !c.IsDead))) },
-            775 => new() { Sel("armyId", "Army (empty = auto)", ArmyOpts(), req: false) },
             785 => new() { Sel("commanderId", "Force commander", CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => !c.IsDead))) },
             780 => new() { Sel("targetId", "New commander", CharOpts(ownChars)) },
             910 or 915 or 920 or 930 or 475 or 490 or 605 or 665 or 670 or 675 or 680 => new() { Hx("hex", "Hex (empty = current location)", req: false) },
@@ -1109,39 +1112,8 @@ public class OrdersController : ControllerBase
             if (!_db.Companies.Any(c => c.Id == cid && c.NationId == ctx.Nation.Id))
                 errors.Add("Company not found");
         }
-        if (code is 780 or 785)
-        {
-            var tid = code == 780 ? Str("targetId") : Str("armyId");
-            if (code == 780 && FindChar(tid) == null) errors.Add("Target commander not found");
-            if (code == 785 && !ctx.Nation.Armies.Any(a => a.Id == tid)) errors.Add("Army not found");
-        }
-        if (code is 520 && OwnPcAt(ctx.EffLoc) == null) errors.Add("Must be at one of your population centres");
-        if (code == 525)
-        {
-            var pc = PcAt(ctx.EffLoc);
-            if (pc == null) errors.Add("No population centre here");
-            else if (pc.NationId == ctx.Nation.Id) errors.Add("Use 520 on your own centres");
-            else if (pc.IsHidden) errors.Add("No visible population centre here");
-        }
-        if (code == 530)
-        {
-            var pc = OwnPcAt(ctx.EffLoc);
-            if (pc == null) errors.Add("Must be at one of your population centres");
-            else if (!pc.HasHarbour || pc.HasPort) errors.Add("Needs a harbour (not yet a port) here");
-        }
-        if (code == 535 && OwnPcAt(ctx.EffLoc) == null) errors.Add("Must be at one of your population centres");
-        if (code is 552 or 555 && OwnPcAt(ctx.EffLoc) != null) errors.Add("Already have a population centre here");
         if (code == 560 && !ctx.Nation.PopulationCentres.Any(p => p.LocationHex == ctx.EffLoc && p.Size == "camp"))
             errors.Add("No camp of yours here");
-        if (code is 670 or 675 or 680 && PcAt(ParamStr(pars, "hex") ?? ctx.EffLoc) == null)
-            errors.Add("No population centre here");
-        if (code is 949 or 950)
-        {
-            var pc = ParamStr(pars, "pcId") != null
-                ? ctx.Game.Nations.SelectMany(n => n.PopulationCentres).FirstOrDefault(p => p.Id == ParamStr(pars, "pcId"))
-                : PcAt(ParamStr(pars, "hex") ?? ctx.EffLoc);
-            if (pc == null) errors.Add("No population centre found");
-        }
         if (code is 310 or 315 or 320 or 325)
         {
             if (!TurnProcessor.IsMarketProductName(ParamStr(pars, "product"), out _))
@@ -1184,7 +1156,7 @@ public class OrdersController : ControllerBase
         {
             var t = FindChar(Str("targetId"));
             if (Str("targetId") != null && t == null) errors.Add("Target not found");
-            else
+            else if (t != null)
             {
                 if (t.NationId == ctx.Nation.Id) errors.Add("Cannot bribe your own character");
                 if (t.IsKidnapped) errors.Add("Cannot bribe a hostage");
@@ -1196,7 +1168,7 @@ public class OrdersController : ControllerBase
         {
             var t = FindChar(Str("targetId"));
             if (Str("targetId") != null && (t == null || t.IsDead)) errors.Add("Target not found");
-            else
+            else if (t != null)
             {
                 if (t.Id == ch.Id) errors.Add("Cannot guard yourself");
                 if (t.LocationHex != ctx.EffLoc) errors.Add($"Target not in the same hex (at {t.LocationHex})");
@@ -1356,7 +1328,7 @@ public class OrdersController : ControllerBase
         {
             var army = ParamStr(pars, "armyId") != null
                 ? ctx.Nation.Armies.FirstOrDefault(a => a.Id == ParamStr(pars, "armyId"))
-                : ctx.Nation.Armies.FirstOrDefault(a => a.Id == ctx.Ch.ArmyId) ?? ctx.Nation.Armies.FirstOrDefault();
+                : ctx.Nation.Armies.FirstOrDefault(a => a.Id == ctx.Ch.ArmyId);
             var pc = army == null ? null : ctx.Nation.PopulationCentres.FirstOrDefault(p => p.LocationHex == army.LocationHex);
             if (pc != null)
             {
@@ -1378,7 +1350,7 @@ public class OrdersController : ControllerBase
         var pars = ctx.Pars;
         Army? Army() => ParamStr(pars, "armyId") != null
             ? n.Armies.FirstOrDefault(a => a.Id == ParamStr(pars, "armyId"))
-            : n.Armies.FirstOrDefault(a => a.Id == ctx.Ch.ArmyId) ?? n.Armies.FirstOrDefault();
+            : n.Armies.FirstOrDefault(a => a.Id == ctx.Ch.ArmyId);
         PopulationCentre? OwnPc(string? hex) =>
             n.PopulationCentres.FirstOrDefault(p => p.LocationHex == hex);
         int TotalTroops(Army a) => a.HeavyCavalry + a.LightCavalry + a.HeavyInfantry

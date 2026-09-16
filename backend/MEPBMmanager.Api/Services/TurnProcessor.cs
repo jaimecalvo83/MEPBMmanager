@@ -29,6 +29,7 @@ public class TurnProcessor
             .Include(g => g.Turns).ThenInclude(t => t.Orders).ThenInclude(o => o.Character)
             .Include(g => g.Turns).ThenInclude(t => t.Orders).ThenInclude(o => o.Nation)
             .Include(g => g.Turns).ThenInclude(t => t.Orders).ThenInclude(o => o.Navy)
+            .Include(g => g.Turns).ThenInclude(t => t.Orders).ThenInclude(o => o.Army)
             .Include(g => g.Nations).ThenInclude(n => n.Armies).ThenInclude(a => a.Characters)
             .Include(g => g.Nations).ThenInclude(n => n.Navies)
             .Include(g => g.Nations).ThenInclude(n => n.PopulationCentres)
@@ -329,7 +330,8 @@ public class TurnProcessor
         // Auto-resolve armyId si no se especificÃ³
         if (order.ArmyId == null && order.Army == null)
         {
-            order.Army = order.Nation.Armies.FirstOrDefault()
+            order.Army = order.Nation.Armies.FirstOrDefault(a => a.Id == order.Character?.ArmyId)
+                ?? order.Nation.Armies.FirstOrDefault()
                 ?? game.Nations.FirstOrDefault(n => n.Id == order.NationId)?.Armies.FirstOrDefault();
             if (order.Army != null)
                 order.ArmyId = order.Army.Id;
@@ -1414,7 +1416,7 @@ public class TurnProcessor
     {
         var src = order.Army;
         if (src == null) return MakeResult(order, "No source army", false);
-        if (!parameters.TryGetValue("targetArmyId", out var tgtEl) || !parameters.TryGetValue("amount", out var amtEl))
+        if ((!parameters.TryGetValue("targetArmyId", out var tgtEl) && !parameters.TryGetValue("destArmyId", out tgtEl)) || !parameters.TryGetValue("amount", out var amtEl))
             return MakeResult(order, "Missing targetArmyId or amount", false);
         var tgt = _db.Armies.Find(tgtEl.GetString());
         if (tgt == null) return MakeResult(order, "Target army not found", false);
