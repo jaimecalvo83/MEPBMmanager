@@ -174,7 +174,9 @@ caché para index.html (assets con hash a 1 año).
 [Front] Scouts (910/915/925/930) con tirada simplificada.
 [Orden] 580/585 solo por TXT. STUBs: 357, 942, 947, 948, 960, 965, 990.
 [Datos] Habilidades de nación en EN dentro de DisplayNamesEn (ES primero).
-[Infra] Sin suite de tests: verificación manual por API (ver §9).
+[Infra] Suite xUnit (backend/MEPBMmanager.Tests, 106 verdes): combate, economía,
+  catálogos, duelos, integración de turno (InMemory) y servicio de órdenes.
+  `dotnet test backend/MEPBMmanager.Tests`. Más verificación manual por API (§9).
 [Infra] Redis desplegado sin uso.
 
 9. VERIFICACIÓN RÁPIDA (ejemplos reales usados)

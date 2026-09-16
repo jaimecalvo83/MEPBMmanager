@@ -61,7 +61,6 @@ export interface OrderFieldSpec {
   required: boolean;
   min?: number | null;
   max?: number | null;
-  def?: string | null;
   options?: OrderFieldOption[] | null;
 }
 

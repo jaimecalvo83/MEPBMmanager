@@ -42,6 +42,121 @@ function parseParams(raw: unknown): Record<string, unknown> {
   }
 }
 
+function FieldLabel({ text, required }: { text: string; required?: boolean }) {
+  return <label className="block text-sm text-gray-400 mb-1">{text}{required ? ' *' : ''}</label>;
+}
+
+function FieldHelp({ text }: { text?: string }) {
+  if (!text) return null;
+  return <p className="text-xs text-gray-500 mt-1">{text}</p>;
+}
+
+interface FieldProps {
+  field: OrderFieldSpec;
+  value: unknown;
+  label?: string;
+  help?: string;
+  onChange: (v: unknown) => void;
+}
+
+function NumberField({ field: f, value, label, help, maxAmount, onMax, onChange }: FieldProps & {
+  maxAmount?: number | null; onMax: () => void;
+}) {
+  const { t } = useLang();
+  return (
+    <div>
+      <FieldLabel text={label ?? f.label} required={f.required} />
+      <div className="flex gap-2">
+        <input
+          type="number"
+          min={f.min ?? undefined}
+          max={f.max ?? undefined}
+          value={typeof value === 'number' ? value : ''}
+          onChange={(e) => onChange(e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+          className="flex-1 p-2 bg-gray-700 rounded border border-gray-600"
+        />
+        {f.key === 'amount' && maxAmount != null && (
+          <button onClick={onMax} className="px-3 py-1 bg-gray-600 text-xs rounded hover:bg-gray-500" title={t('ord.maxTitle')}>
+            {t('ord.maxBtn', { x: maxAmount })}
+          </button>
+        )}
+      </div>
+      <FieldHelp text={help} />
+    </div>
+  );
+}
+
+function SelectField({ field: f, value, label, help, onChange }: FieldProps) {
+  const { t } = useLang();
+  return (
+    <div>
+      <FieldLabel text={label ?? f.label} required={f.required} />
+      <SearchSelect
+        value={typeof value === 'string' ? value : ''}
+        options={(f.options ?? []).map((o) => ({ value: o.value, label: o.label }))}
+        onChange={(v) => onChange(v || undefined)}
+        placeholder={t('ord.selectPh')}
+      />
+      <FieldHelp text={help} />
+    </div>
+  );
+}
+
+function MultiField({ field: f, value, help, onChange }: FieldProps) {
+  const selected: string[] = Array.isArray(value) ? (value as string[]) : [];
+  const toggle = (v: string) => {
+    onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+  };
+  return (
+    <div>
+      <FieldLabel text={f.label} required={f.required} />
+      <div className="flex flex-wrap gap-2">
+        {(f.options ?? []).map((o) => (
+          <label key={o.value} className={`px-2 py-1 rounded text-xs cursor-pointer border ${selected.includes(o.value) ? 'bg-mepbm-gold text-gray-900 border-mepbm-gold' : 'bg-gray-700 text-gray-300 border-gray-600'}`}>
+            <input type="checkbox" className="hidden" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} />
+            {o.label}
+          </label>
+        ))}
+      </div>
+      <FieldHelp text={help} />
+    </div>
+  );
+}
+
+function FlagField({ field: f, value, onChange }: FieldProps) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-gray-300">
+      <input type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked ? true : undefined)} className="rounded" />
+      {f.label}
+    </label>
+  );
+}
+
+function TextField({ field: f, value, label, help, placeholder, suggestNames, characterId, onChange }: FieldProps & {
+  placeholder?: string; suggestNames?: string[] | null; characterId: string;
+}) {
+  const listId = f.key === 'name' && suggestNames ? `names-${characterId}-${f.key}` : undefined;
+  return (
+    <div>
+      <FieldLabel text={label ?? f.label} required={f.required} />
+      <input
+        type="text"
+        value={typeof value === 'string' ? value : ''}
+        placeholder={placeholder ?? (f.kind === 'hex' ? 'Q,R' : '')}
+        onChange={(e) => onChange(e.target.value || undefined)}
+        className="w-full p-2 bg-gray-700 rounded border border-gray-600"
+        list={listId}
+      />
+      {listId && (
+        <datalist id={listId}>
+          {suggestNames!.map((n) => <option key={n} value={n} />)}
+        </datalist>
+      )}
+      <FieldHelp text={help} />
+    </div>
+  );
+}
+
 function OrderComposer({
   gameId,
   character,
@@ -109,91 +224,22 @@ function OrderComposer({
   const renderField = (f: OrderFieldSpec) => {
     const value = params[f.key];
     const override = schema?.fields?.[f.key];
-    const label = override?.label ?? f.label;
-    if (f.kind === 'number') {
-      return (
-        <div key={f.key}>
-          <label className="block text-sm text-gray-400 mb-1">{label}{f.required ? ' *' : ''}</label>
-          <div className="flex gap-2">
-            <input
-              type="number"
-              min={f.min ?? undefined}
-              max={f.max ?? undefined}
-              value={typeof value === 'number' ? value : ''}
-              onChange={(e) => setParam(f.key, e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
-              className="flex-1 p-2 bg-gray-700 rounded border border-gray-600"
-            />
-            {f.key === 'amount' && estimate.data?.maxAmount != null && (
-              <button onClick={applyMax} className="px-3 py-1 bg-gray-600 text-xs rounded hover:bg-gray-500" title={t('ord.maxTitle')}>
-                {t('ord.maxBtn', { x: estimate.data.maxAmount })}
-              </button>
-            )}
-          </div>
-          {override?.help && <p className="text-xs text-gray-500 mt-1">{override.help}</p>}
-        </div>
-      );
+    const set = (v: unknown) => setParam(f.key, v);
+    switch (f.kind) {
+      case 'number':
+        return <NumberField key={f.key} field={f} value={value} label={override?.label} help={override?.help}
+          maxAmount={f.key === 'amount' ? estimate.data?.maxAmount : undefined} onMax={applyMax} onChange={set} />;
+      case 'select':
+        return <SelectField key={f.key} field={f} value={value} label={override?.label} help={override?.help} onChange={set} />;
+      case 'multiselect':
+        return <MultiField key={f.key} field={f} value={value} help={override?.help} onChange={set} />;
+      case 'flag':
+        return <FlagField key={f.key} field={f} value={value} onChange={set} />;
+      default:
+        return <TextField key={f.key} field={f} value={value} label={override?.label} help={override?.help}
+          placeholder={override?.placeholder} suggestNames={f.key === 'name' ? estimate.data?.suggestNames : undefined}
+          characterId={character.id} onChange={set} />;
     }
-    if (f.kind === 'select') {
-      return (
-        <div key={f.key}>
-          <label className="block text-sm text-gray-400 mb-1">{label}{f.required ? ' *' : ''}</label>
-          <SearchSelect
-            value={typeof value === 'string' ? value : ''}
-            options={(f.options ?? []).map((o) => ({ value: o.value, label: o.label }))}
-            onChange={(v) => setParam(f.key, v || undefined)}
-            placeholder={t('ord.selectPh')}
-          />
-          {override?.help && <p className="text-xs text-gray-500 mt-1">{override.help}</p>}
-        </div>
-      );
-    }
-    if (f.kind === 'multiselect') {
-      const selected: string[] = Array.isArray(value) ? (value as string[]) : [];
-      const toggle = (v: string) => {
-        setParam(f.key, selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
-      };
-      return (
-        <div key={f.key}>
-          <label className="block text-sm text-gray-400 mb-1">{label}{f.required ? ' *' : ''}</label>
-          <div className="flex flex-wrap gap-2">
-            {(f.options ?? []).map((o) => (
-              <label key={o.value} className={`px-2 py-1 rounded text-xs cursor-pointer border ${selected.includes(o.value) ? 'bg-mepbm-gold text-gray-900 border-mepbm-gold' : 'bg-gray-700 text-gray-300 border-gray-600'}`}>
-                <input type="checkbox" className="hidden" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} />
-                {o.label}
-              </label>
-            ))}
-          </div>
-          {override?.help && <p className="text-xs text-gray-500 mt-1">{override.help}</p>}
-        </div>
-      );
-    }
-    if (f.kind === 'flag') {
-      return (
-        <label key={f.key} className="flex items-center gap-2 text-sm text-gray-300">
-          <input type="checkbox" checked={value === true} onChange={(e) => setParam(f.key, e.target.checked ? true : undefined)} className="rounded" />
-          {label}
-        </label>
-      );
-    }
-    return (
-      <div key={f.key}>
-        <label className="block text-sm text-gray-400 mb-1">{label}{f.required ? ' *' : ''}</label>
-        <input
-          type="text"
-          value={typeof value === 'string' ? value : ''}
-          placeholder={override?.placeholder ?? (f.kind === 'hex' ? 'Q,R' : '')}
-          onChange={(e) => setParam(f.key, e.target.value || undefined)}
-          className="w-full p-2 bg-gray-700 rounded border border-gray-600"
-          list={f.key === 'name' && estimate.data?.suggestNames ? `names-${character.id}-${f.key}` : undefined}
-        />
-        {f.key === 'name' && estimate.data?.suggestNames && (
-          <datalist id={`names-${character.id}-${f.key}`}>
-            {estimate.data.suggestNames.map((n) => <option key={n} value={n} />)}
-          </datalist>
-        )}
-        {override?.help && <p className="text-xs text-gray-500 mt-1">{override.help}</p>}
-      </div>
-    );
   };
 
   const est = estimate.data;

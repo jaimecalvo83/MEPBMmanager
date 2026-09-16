@@ -4,15 +4,22 @@
 
 - `backend/MEPBMmanager.Api/Controllers/` — solo HTTP: autentica, resuelve
   ámbito (jugador/staff), delega y mapea errores a status. **Sin reglas.**
-- `backend/MEPBMmanager.Api/Orders/` — todo lo de órdenes:
-  - `OrderEstimateService.cs` — reglas: elegibilidad, formularios por orden
-    (`RequiresFor`), validación, conflictos cruzados, costes. Punto de
-    entrada: `EstimateAsync` / `EligibleAsync`.
-  - `OrderTexts.cs` — **único sitio con textos ES/EN de órdenes** (claves
-    `err.*`, `reason.*`, `label.*`, `opt.*`, `warn.*`, `cost.*` + nombres
-    de naciones/materiales/etc). ¿Cambiar un texto? Aquí. ¿Añadir idioma?
-    Añade columna aquí y `Norm`.
-  - `OrderModels.cs` — DTOs, `EstimateCtx`, `PendingUsage`,
+- `backend/MEPBMmanager.Api/Orders/` — todo lo de órdenes (una clase
+  `partial` por fichero, una responsabilidad por fichero):
+  - `OrderEstimateService.cs` — orquestación: `EstimateAsync` /
+    `EligibleAsync` + constantes compartidas. Sin reglas.
+  - `.Eligibility.cs` — quién puede dar qué orden.
+  - `.Forms.cs` — qué campos pide cada orden (`RequiresFor`).
+  - `.Validation.cs` — validación: un método pequeño por familia.
+  - `.Costs.cs` — costes en vivo: un método por familia, devuelve
+    `CostEstimate` (sin `out`).
+  - `EstimateScope.cs` — todo lo que una regla necesita en un objeto
+    (mundo, parámetros con nombre, errores). Las reglas son
+    `Regla(código, scope)`: 2 parámetros, sin locales de una letra.
+  - `OrderTexts.cs` — **único sitio** con textos ES/EN de órdenes (claves
+    `err.*`, `reason.*`, `label.*`, `opt.*`, `warn.*`, `cost.*` + nombres).
+    ¿Cambiar un texto? Aquí. ¿Añadir idioma? Añade columna aquí y `Norm`.
+  - `OrderModels.cs` — DTOs, `EstimateCtx`, `PendingUsage`, `CostEstimate`,
     `OrderRequestException` (el servicio falla con status; el controlador
     lo traduce a HTTP).
 - `backend/MEPBMmanager.Api/Services/TurnProcessor.cs` — resolución del
@@ -34,9 +41,14 @@
 
 1. Nada de literales ES fuera de `OrderTexts` / `dict-*.ts` / catálogos `*Es`.
 2. El controlador no decide reglas; el servicio no sabe de HTTP.
-3. `dotnet test backend/MEPBMmanager.Tests` (84 verdes: combate, economía,
-   catálogos, duelos, integración de turno con InMemory) antes de subir.
-4. Español en comentarios, inglés en identificadores.
+3. Funciones pequeñas con nombres que explican la intención; nada de
+   locales de una letra (`t`, `n`, `pars`); las reglas reciben `(código,
+   scope)`; sin `out` (devolver records); sin código muerto ni duplicados
+   (si lo ves, extráelo o bórralo).
+4. `dotnet test backend/MEPBMmanager.Tests` (106+ verdes: combate, economía,
+   catálogos, duelos, integración de turno con InMemory, servicio de
+   órdenes) antes de subir.
+5. Español en comentarios, inglés en identificadores.
 
 ## Añadir una orden nueva
 

@@ -6,7 +6,7 @@ namespace MEPBMmanager.Api.Orders;
 /// <summary>HTTP shapes for the orders endpoints (no logic).</summary>
 public record OrderFieldOptionDto(string Value, string Label);
 public record OrderFieldSpecDto(string Key, string Label, string Kind, bool Required,
-    int? Min = null, int? Max = null, string? Def = null, List<OrderFieldOptionDto>? Options = null);
+    int? Min = null, int? Max = null, List<OrderFieldOptionDto>? Options = null);
 public record EstimateAfterOrderDto(int Code, System.Text.Json.JsonElement? Parameters);
 public record EstimateOrderRequest(string CharacterId, int Code, System.Text.Json.JsonElement? Parameters,
     string? ArmyId, string? NavyId, EstimateAfterOrderDto? AfterOrder);
@@ -25,14 +25,12 @@ public record OrderValidationResult
 /// <summary>Resolved context for one estimate: game graph + effective location + params + language.</summary>
 public sealed class EstimateCtx
 {
-    public EstimateCtx(Game game, Nation nation, Character ch, Army? army, Navy? navy,
+    public EstimateCtx(Game game, Nation nation, Character ch,
         string? effLoc, Dictionary<string, System.Text.Json.JsonElement> pars, string lang)
-    { Game = game; Nation = nation; Ch = ch; Army = army; Navy = navy; EffLoc = effLoc; Pars = pars; Lang = lang; }
+    { Game = game; Nation = nation; Ch = ch; EffLoc = effLoc; Pars = pars; Lang = lang; }
     public Game Game { get; }
     public Nation Nation { get; }
     public Character Ch { get; }
-    public Army? Army { get; }
-    public Navy? Navy { get; }
     public string? EffLoc { get; }
     public Dictionary<string, System.Text.Json.JsonElement> Pars { get; }
     public string Lang { get; }
@@ -49,6 +47,12 @@ public sealed class PendingUsage
     public HashSet<string> ChallengedTargets = new();
     public HashSet<string> BribedTargets = new();
     public HashSet<string> MovedArtifacts = new();
+}
+
+/// <summary>Live cost result: resource costs plus optional cap and gold income.</summary>
+public record CostEstimate(Dictionary<string, int> Costs, int? MaxAmount, int? ExpectedGold)
+{
+    public static CostEstimate Empty { get; } = new(new Dictionary<string, int>(), null, null);
 }
 
 /// <summary>Service-level failure mapped to an HTTP status by the controller.</summary>
