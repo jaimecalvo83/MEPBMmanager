@@ -286,7 +286,7 @@ public class OrdersController : ControllerBase
                     if (ch.ArmyId != null || commandsNavy) return (true, "");
                     break;
                 case "company": if (ch.CompanyId != null) return (true, ""); break;
-                case "cap": if (ch.IsChampion) return (true, ""); break;
+                case "cap": if (capHex != null && capHex == ch.LocationHex) return (true, ""); break;
                 case "fa": return (false, L(lang, "Fourth Age only", "Solo Cuarta Edad"));
             }
         }
@@ -648,6 +648,7 @@ public class OrdersController : ControllerBase
             230 or 235 => new() { Sel("tactic", L(lng, "Tactic", "Táctica"), TacticOptions, req: false) },
             270 or 340 or 345 or 347 or 440 or 452 or 456
                 => new() { Num("amount", L(lng, "Amount", "Cantidad"), min: 1) },
+            240 or 250 or 255 or 260 => new() { Sel("tactic", L(lng, "Tactic", "Táctica"), TacticOptions, req: false) },
             275 => new() { Num("warships", L(lng, "Warships (empty = all)", "Buques (vacío = todos)"), req: false, min: 0), Num("transports", L(lng, "Transports (empty = all)", "Transportes (vacío = todos)"), req: false, min: 0) },
             280 => new() { Num("warships", L(lng, "Warships (empty = all)", "Buques (vacío = todos)"), req: false, min: 0), Num("transports", L(lng, "Transports (empty = all)", "Transportes (vacío = todos)"), req: false, min: 0) },
             300 => new() { Num("newRate", L(lng, "New tax rate", "Nueva tasa"), min: 10, max: 80) },

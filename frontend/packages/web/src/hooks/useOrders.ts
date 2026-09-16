@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { ordersApi } from '../api/client';
+import { useLang } from '../i18n/lang';
 import type { OrderListItem } from '../types';
 
 export function useOrders(gameId: string) {
@@ -37,8 +38,9 @@ export interface EligibleOrder {
 }
 
 export function useEligibleOrders(gameId: string, characterId: string | null) {
+  const { lang } = useLang();
   return useQuery<EligibleOrder[]>(
-    ['eligible-orders', gameId, characterId],
+    ['eligible-orders', gameId, characterId, lang],
     async () => {
       const { data } = await ordersApi.eligible(gameId, characterId!);
       return data.eligible;
@@ -85,8 +87,9 @@ export function useOrderEstimate(
   buildPayload: () => { parameters: Record<string, unknown>; armyId?: string; afterOrder?: { code: number; parameters?: Record<string, unknown> } } | null,
   ready = true
 ) {
+  const { lang } = useLang();
   return useQuery<OrderEstimate>(
-    ['order-estimate', gameId, characterId, code, paramsKey, afterKey],
+    ['order-estimate', gameId, characterId, code, paramsKey, afterKey, lang],
     async () => {
       const payload = buildPayload();
       if (!payload) throw new Error('No payload');

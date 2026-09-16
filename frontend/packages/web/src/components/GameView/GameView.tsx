@@ -879,7 +879,7 @@ function ReportsTab({ gameId, turns }: { gameId: string; turns: any[] }) {
   const activeTurnId = turns.some((t: any) => t.id === selectedTurnId) ? selectedTurnId : turns[0]?.id ?? null;
 
   const { data, isLoading, isError } = useQuery(
-    ['turn-report', gameId, activeTurnId],
+    ['turn-report', gameId, activeTurnId, lang],
     async () => {
       const { data } = await gamesApi.getTurnReport(gameId, activeTurnId!);
       return data as { turn: any; sections: Array<{ key?: string; title: string; nation?: string; allegiance?: string; entries: any[] }> };
