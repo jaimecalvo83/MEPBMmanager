@@ -211,7 +211,7 @@ function OrderComposer({
         options={availableOrders.map((order) => ({
           value: String(order.code),
           label: `[${order.code}] ${order.abbreviation} - ${order.name}`,
-          tooltip: <OrderDropdownTip code={order.code} />,
+          tooltip: <OrderDropdownTip gameId={gameId} characterId={character.id} code={order.code} />,
         }))}
         onChange={(v) => {
           setOrderCode(v === '' ? 0 : parseInt(v, 10));
@@ -221,7 +221,7 @@ function OrderComposer({
       />
       {orderCode > 0 && (
         <div className="text-sm">
-          <OrderInfoTip code={orderCode} requires={est?.requires} costs={est?.costs} expectedGold={est?.expectedGold} maxAmount={est?.maxAmount} />
+          <OrderInfoTip code={orderCode} requires={est?.requires} />
         </div>
       )}
       {schema?.help && orderCode > 0 && (
@@ -393,9 +393,6 @@ function PendingOrderLine({ gameId, characterId, order, index, onChanged }: {
         <OrderInfoTip
           code={order.code}
           requires={est.data?.requires}
-          costs={est.data?.costs}
-          expectedGold={est.data?.expectedGold}
-          maxAmount={est.data?.maxAmount}
         />
         {' '}
         <span className="text-gray-400">{describeParams(stored, est.data?.requires)}</span>

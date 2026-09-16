@@ -82,7 +82,8 @@ export function useOrderEstimate(
   code: number,
   paramsKey: string,
   afterKey: string,
-  buildPayload: () => { parameters: Record<string, unknown>; armyId?: string; afterOrder?: { code: number; parameters?: Record<string, unknown> } } | null
+  buildPayload: () => { parameters: Record<string, unknown>; armyId?: string; afterOrder?: { code: number; parameters?: Record<string, unknown> } } | null,
+  ready = true
 ) {
   return useQuery<OrderEstimate>(
     ['order-estimate', gameId, characterId, code, paramsKey, afterKey],
@@ -96,6 +97,6 @@ export function useOrderEstimate(
       });
       return data;
     },
-    { enabled: !!gameId && !!characterId && code > 0 && !!paramsKey, retry: false, staleTime: 30000 }
+    { enabled: !!gameId && !!characterId && code > 0 && !!paramsKey && ready, retry: false, staleTime: 30000 }
   );
 }
