@@ -2993,7 +2993,18 @@ public class TurnProcessor
 
         order.Character.MageSkill = Math.Min(100, order.Character.MageSkill + 1);
 
-        if (parameters.TryGetValue("targetId", out var tgtEl))
+        // Cada hechizo mira un tipo de diana (el formulario solo ofrece la suya).
+        var kind = def.Id switch
+        {
+            408 or 417 or 420 or 422 or 424 or 430 or 436 => "char",
+            402 or 404 or 410 or 419 => "nation",
+            412 or 418 or 428 => "artifact",
+            413 or 416 or 434 => "pc",
+            406 or 426 => "army",
+            _ => "hex"
+        };
+
+        if (kind == "char" && parameters.TryGetValue("targetId", out var tgtEl))
         {
             var tgt = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == tgtEl.GetString());
             if (tgt == null) return MakeResult(order, "Target character not found", false);
@@ -3001,7 +3012,7 @@ public class TurnProcessor
             order.Result = $"Scry reveals {tgt.Name} ({tgt.Type}) of {tgt.Nation?.Name ?? "?"} at {tgt.LocationHex}, health {tgt.Health}, challenge {tgt.ChallengeRank}";
             return MakeResult(order, order.Result);
         }
-        if (parameters.TryGetValue("nationId", out var natEl))
+        if (kind == "nation" && parameters.TryGetValue("nationId", out var natEl))
         {
             var nat = game.Nations.FirstOrDefault(n => n.Id == natEl.GetString());
             if (nat == null) return MakeResult(order, "Nation not found", false);
@@ -3011,7 +3022,7 @@ public class TurnProcessor
                 $"{nat.Characters.Count(c => !c.IsDead)} characters, gold {nat.Gold}";
             return MakeResult(order, order.Result);
         }
-        if (parameters.TryGetValue("artifactId", out var artEl))
+        if (kind == "artifact" && parameters.TryGetValue("artifactId", out var artEl))
         {
             var art = _db.Artifacts.Find(artEl.GetString());
             if (art == null) return MakeResult(order, "Artifact not found", false);
@@ -3021,6 +3032,25 @@ public class TurnProcessor
             order.Result = holder != null
                 ? $"Scry locates {art.Name} held by {holder.Name} ({holder.Nation?.Name}) at {holder.LocationHex}"
                 : $"Scry locates {art.Name} at {art.LocationHex ?? "unknown"}";
+            return MakeResult(order, order.Result);
+        }
+
+        if (kind == "pc" && parameters.TryGetValue("pcId", out var pcEl))
+        {
+            var pc = game.Nations.SelectMany(n => n.PopulationCentres).FirstOrDefault(p => p.Id == pcEl.GetString());
+            if (pc == null) return MakeResult(order, "Population centre not found", false);
+            var pcNation = game.Nations.FirstOrDefault(n => n.Id == pc.NationId)?.Name ?? "?";
+            order.Status = "resolved";
+            order.Result = $"Scry reveals {pc.Name} ({pc.Size}) of {pcNation} at {pc.LocationHex}, loyalty {pc.Loyalty}, production {pc.Production}, fortifications {pc.Fortification ?? "none"}" + (pc.HasPort ? ", port" : pc.HasHarbour ? ", harbour" : "");
+            return MakeResult(order, order.Result);
+        }
+        if (kind == "army" && parameters.TryGetValue("armyId", out var arEl))
+        {
+            var scryArmy = game.Nations.SelectMany(n => n.Armies).FirstOrDefault(x => x.Id == arEl.GetString());
+            if (scryArmy == null) return MakeResult(order, "Army not found", false);
+            var scryNation = game.Nations.FirstOrDefault(n => n.Id == scryArmy.NationId)?.Name ?? "?";
+            order.Status = "resolved";
+            order.Result = $"Scry reveals {scryArmy.Name} of {scryNation} at {scryArmy.LocationHex}: HC:{scryArmy.HeavyCavalry} LC:{scryArmy.LightCavalry} HI:{scryArmy.HeavyInfantry} LI:{scryArmy.LightInfantry} AR:{scryArmy.Archers} MA:{scryArmy.MenAtArms}, morale {scryArmy.Morale}";
             return MakeResult(order, order.Result);
         }
 

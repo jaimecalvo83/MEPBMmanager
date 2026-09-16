@@ -196,6 +196,21 @@ function OrderComposer({
 
   const est = estimate.data;
   const costEntries = est ? Object.entries(est.costs ?? {}).filter(([, v]) => (v as number) !== 0) : [];
+  // Drop params the current order/spell no longer asks for (e.g. switching lore spell).
+  const requireKeys = est ? est.requires.map((f) => f.key).join(',') : '';
+  useEffect(() => {
+    if (!est) return;
+    const keys = new Set(est.requires.map((f) => f.key));
+    setParams((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const k of Object.keys(next)) {
+        if (!keys.has(k)) { delete next[k]; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requireKeys]);
 
   return (
     <div className="bg-gray-900 rounded p-3 border border-gray-700 space-y-3">

@@ -473,6 +473,13 @@ public class OrdersController : ControllerBase
         new("1", "1 Tower"), new("2", "2 Fort"), new("3", "3 Castle"), new("4", "4 Keep"), new("5", "5 Citadel")
     };
 
+    // Hechizos de lore por tipo de diana (940 criba el formulario según hechizo).
+    private static readonly HashSet<int> LoreCharSpells = new() { 408, 417, 420, 422, 424, 430, 436 };
+    private static readonly HashSet<int> LoreNationSpells = new() { 402, 404, 410, 419 };
+    private static readonly HashSet<int> LoreArtifactSpells = new() { 412, 418, 428 };
+    private static readonly HashSet<int> LorePcSpells = new() { 413, 416, 434 };
+    private static readonly HashSet<int> LoreArmySpells = new() { 406, 426 };
+
     private List<OrderFieldSpecDto> RequiresFor(int code, EstimateCtx ctx)
     {
         var ch = ctx.Ch;
@@ -497,6 +504,33 @@ public class OrdersController : ControllerBase
             .Select(a => new OrderFieldOptionDto(a.Id, a.Name)).ToList();
         var catalogSpells = SpellCatalog.All
             .Select(s => new OrderFieldOptionDto(s.Id.ToString(), $"#{s.Id} {s.Name}{(s.IsLost ? " [lost]" : "")}")).ToList();
+        // 940: el formulario se criba según el hechizo elegido.
+        List<OrderFieldSpecDto> LoreRequires()
+        {
+            var fields = new List<OrderFieldSpecDto>
+                { Sel("spellId", "Spell", SpellOpts(SpellType.Lore)) };
+            var sid = ParamInt(ctx.Pars, "spellId", -1);
+            if (LoreCharSpells.Contains(sid))
+                fields.Add(Sel("targetId", "Target character",
+                    CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => !c.IsDead))));
+            else if (LoreNationSpells.Contains(sid))
+                fields.Add(Sel("nationId", "Target nation", allNations));
+            else if (LoreArtifactSpells.Contains(sid))
+                fields.Add(Sel("artifactId", "Artifact", _db.Artifacts.ToList()
+                    .Select(a => new OrderFieldOptionDto(a.Id, a.HeldByCharacterId != null
+                        ? $"{a.Name} (held)" : $"{a.Name} @ {a.LocationHex ?? "?"}")).ToList()));
+            else if (LorePcSpells.Contains(sid))
+                fields.Add(Sel("pcId", "Population centre", ctx.Game.Nations
+                    .SelectMany(n => n.PopulationCentres.Select(p => new { p, n.Name }))
+                    .Select(x => new OrderFieldOptionDto(x.p.Id, $"{x.p.Name} ({x.p.Size}, {x.Name}) @ {x.p.LocationHex}")).ToList()));
+            else if (LoreArmySpells.Contains(sid))
+                fields.Add(Sel("armyId", "Army", ctx.Game.Nations
+                    .SelectMany(n => n.Armies.Select(a => new { a, n.Name }))
+                    .Select(x => new OrderFieldOptionDto(x.a.Id, $"{x.a.Name} ({x.Name}) @ {x.a.LocationHex}")).ToList()));
+            else
+                fields.Add(Hx("hex", "Hex (empty = here)", req: false));
+            return fields;
+        }
 
         return code switch
         {
@@ -504,10 +538,15 @@ public class OrdersController : ControllerBase
             180 or 185 => new() { Sel("nationId", "Nation", allNations) },
             690 => new() { Sel("nationId", "Victim nation", allNations), Num("amount", "Gold amount", min: 1) },
             210 or 615 or 620 => new() { Sel("targetId", "Target character", CharOpts(foeCharsAtLoc)) },
-            225 or 120 or 330 => new() { Sel("spellId", "Spell",
-                code == 225 ? SpellOpts(SpellType.Combat) : code == 120 ? SpellOpts(SpellType.Heal)
-                : SpellOpts(SpellType.Conjuring)) },
-            705 => new() { Sel("spellId", "Spell (empty = random research)", catalogSpells, req: false) },
+            225 or 330 => new() { Sel("spellId", "Spell",
+                code == 225 ? SpellOpts(SpellType.Combat) : SpellOpts(SpellType.Conjuring)) },
+            120 => new() { Sel("spellId", "Spell", SpellOpts(SpellType.Heal)),
+                Sel("targetId", "Target character (same hex, empty = self)", CharOpts(ctx.Game.Nations
+                    .SelectMany(n => n.Characters).Where(c => !c.IsDead && c.LocationHex == ctx.EffLoc)), req: false) },
+            705 => new() { Sel("spellId", "Spell (empty = random research)", SpellCatalog.All
+                .Where(s => !ch.Spells.Any(x => x.SpellId == s.Id && x.IsKnown && !x.IsLost)
+                    && (!s.IsLost || NationAbilities.CanLearnLostSpell(ctx.Nation.Name, s.Id)))
+                .Select(s => new OrderFieldOptionDto(s.Id.ToString(), $"#{s.Id} {s.Name}{(s.IsLost ? " [lost]" : "")}")).ToList(), req: false) },
             230 or 235 => new() { Sel("tactic", "Tactic", TacticOptions, req: false) },
             270 or 340 or 345 or 347 or 440 or 452 or 456
                 => new() { Num("amount", "Amount", min: 1) },
@@ -557,8 +596,7 @@ public class OrdersController : ControllerBase
             935 => new() { Sel("artifactId", "Artifact", heldArts), Hx("hex", "Hex to scry (empty = here)", req: false) },
             900 => new() { Sel("artifactId", "Artifact (optional)", _db.Artifacts.Where(a => a.HeldByCharacterId == null).ToList().Select(a => new OrderFieldOptionDto(a.Id, $"{a.Name} @ {a.LocationHex ?? "?"}")).ToList(), req: false) },
             905 => new() { Sel("commanderId", "Force commander", CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => !c.IsDead))), Flag("follow", "Follow"), Hx("hex", "Hex (empty = force location)", req: false) },
-            940 => new() { Sel("spellId", "Spell", SpellOpts(SpellType.Lore)), Sel("targetId", "Target character (optional)", CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => !c.IsDead)), req: false),
-                Sel("nationId", "Target nation (optional)", allNations, req: false), Sel("artifactId", "Artifact (optional)", _db.Artifacts.ToList().Select(a => new OrderFieldOptionDto(a.Id, a.Name)).ToList(), req: false), Hx("hex", "Hex (optional)", req: false) },
+            940 => LoreRequires(),
             949 => new() { Sel("targetId", "Receiving emissary (other nation, same hex)", CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => c.EmissarySkill > 0 && !c.IsDead))) },
             950 => new() { Sel("pcId", "New capital (major town/city)", ctx.Nation.PopulationCentres.Where(p => p.Size == "major town" || p.Size == "city").Select(p => new OrderFieldOptionDto(p.Id, p.Name)).ToList()) },
             660 => new() { Sel("targetId", "Hostage", CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => c.IsKidnapped && !c.IsDead))), Num("amount", "Ransom gold (empty = 1000)", req: false, min: 1) },
@@ -1036,6 +1074,8 @@ public class OrdersController : ControllerBase
             if (S("targetId") is { } t1 && FC(t1) == null) errors.Add("Target character not found");
             if (S("nationId") is { } n1 && !game.Nations.Any(x => x.Id == n1)) errors.Add("Nation not found");
             if (S("artifactId") is { } a1 && !_db.Artifacts.Any(x => x.Id == a1)) errors.Add("Artifact not found");
+            if (S("pcId") is { } p1 && !game.Nations.SelectMany(x => x.PopulationCentres).Any(p => p.Id == p1)) errors.Add("Population centre not found");
+            if (S("armyId") is { } m1 && !game.Nations.SelectMany(x => x.Armies).Any(a => a.Id == m1)) errors.Add("Army not found");
         }
         if (code == 949)
         {
