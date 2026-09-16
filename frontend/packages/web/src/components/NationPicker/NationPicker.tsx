@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNations } from '../../hooks/useNations';
 import { useQueryClient } from 'react-query';
 import { gamesApi } from '../../api/client';
-import { useLang } from '../../i18n/lang';
+import { useLang, sideLabel } from '../../i18n/lang';
 
 interface NationPickerProps {
   gameId: string;
@@ -76,7 +76,7 @@ const NationPicker: React.FC<NationPickerProps> = ({ gameId, mode = 'join', onCl
                     />
                     <span>{nation.name}</span>
                     {nation.allegiance && (
-                      <span className="text-xs opacity-70">({nation.allegiance})</span>
+                      <span className="text-xs opacity-70">({sideLabel(nation.allegiance, t)})</span>
                     )}
                   </div>
                 </button>

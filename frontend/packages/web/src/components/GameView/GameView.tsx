@@ -9,7 +9,7 @@ import OrdersPanel from '../Orders/OrdersPanel';
 import MessagesPanel from '../Messages/MessagesPanel';
 import NationPicker from '../NationPicker/NationPicker';
 import { SPELL_DEFINITIONS } from '@MEPBMmanager/shared';
-import { useLang, LanguageSwitcher, type TFunc } from '../../i18n/lang';
+import { useLang, LanguageSwitcher, sideLabel, charTypeLabel, pcSizeLabel, fortLabel, seasonLabel, statusLabel, terrainLabel, alignmentValue, type TFunc } from '../../i18n/lang';
 
 interface PlayerInfo {
   id: string;
@@ -244,7 +244,7 @@ function SetupView({
     <div className="min-h-screen bg-gray-900">
       <div className="p-6">
         <h2 className="text-xl font-bold text-mepbm-gold mb-2">{t('setup.gameTitle')}{gameState?.game?.name}</h2>
-        <p className="text-gray-400 mb-4">{t('setup.statusWaiting', { s: gameState.game.status })}</p>
+        <p className="text-gray-400 mb-4">{t('setup.statusWaiting', { s: statusLabel(gameState.game.status, t) })}</p>
 
         {isGameAdmin && (
           <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-blue-600">
@@ -554,7 +554,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
             <h1 className="text-lg font-bold text-white">{gameState?.game?.name}</h1>
             {currentTurn && (
               <span className="text-sm text-gray-400">
-                {t('game.turnLine', { n: currentTurn.number, s: currentTurn.season, d: new Date(currentTurn.deadline).toLocaleDateString() })}
+                {t('game.turnLine', { n: currentTurn.number, s: seasonLabel(currentTurn.season, t), d: new Date(currentTurn.deadline).toLocaleDateString() })}
               </span>
             )}
           </div>
@@ -583,7 +583,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded" style={{ backgroundColor: nation.color }} />
                 <span className="font-bold text-white">{nation.name}</span>
-                <span className="text-sm text-gray-400">({allegianceLabel(nation.allegiance, t)})</span>
+                <span className="text-sm text-gray-400">({sideLabel(nation.allegiance, t)})</span>
               </div>
             )}
           </div>
@@ -679,7 +679,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
                         hex.hasFord ? t('map.ford') : null,
                         hex.hasBridge ? t('map.bridge') : null,
                       ].filter(Boolean);
-                      return <span>{t('map.terrainLine', { t: hex.terrain, f: feats.length > 0 ? ` (${feats.join(' · ')})` : '' })}</span>;
+                      return <span>{t('map.terrainLine', { t: terrainLabel(hex.terrain, t), f: feats.length > 0 ? ` (${feats.join(' · ')})` : '' })}</span>;
                     })()}
                     {(() => {
                       const pc = populationCentres.find((p: any) => p.locationHex === `${selectedHex.q},${selectedHex.r}`);
@@ -746,13 +746,6 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
 // ═══════════════════════════════════════════
 // RELATIONS TAB
 // ═══════════════════════════════════════════
-function allegianceLabel(code: string, t: TFunc): string {
-  if (code === 'free_peoples') return t('game.freeP');
-  if (code === 'dark_servants') return t('game.darkP');
-  if (code === 'neutral') return t('game.neut');
-  return code;
-}
-
 function relLevels(t: TFunc) {
   return [
     { value: 2, label: t('rel.ally') },
@@ -833,7 +826,7 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
                       {n.name}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-300">{allegianceLabel(n.allegiance, t)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-300">{sideLabel(n.allegiance, t)}</td>
                   <td className="px-4 py-3 text-sm">{relationBadge(level, t)}</td>
                   <td className="px-4 py-3 text-sm">
                     <select
@@ -892,7 +885,7 @@ function ReportsTab({ gameId, turns }: { gameId: string; turns: any[] }) {
                 : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'
             }`}
           >
-            {tr('rep.turnBtn', { n: t.number, s: t.season, st: t.status })}
+            {tr('rep.turnBtn', { n: t.number, s: seasonLabel(t.season, tr), st: statusLabel(t.status, tr) })}
           </button>
         ))}
       </div>
@@ -1019,8 +1012,8 @@ function NationTab({ nation, populationCentres, armies, characters, currentTurn 
           <div>
             <h2 className="text-2xl font-bold text-white">{nation.name}</h2>
             <p className="text-sm text-gray-400">
-              {allegianceLabel(nation.allegiance, t)}
-              {currentTurn ? ` · ${t('game.turnShort', { n: currentTurn.number, s: currentTurn.season ? ` · ${currentTurn.season}` : '' })}` : ''}
+              {sideLabel(nation.allegiance, t)}
+              {currentTurn ? ` · ${t('game.turnShort', { n: currentTurn.number, s: currentTurn.season ? ` · ${seasonLabel(currentTurn.season, t)}` : '' })}` : ''}
             </p>
           </div>
         </div>
@@ -1066,8 +1059,8 @@ function terrainAt(hexTiles: any[], locationHex: string): string {
 function pcSentence(populationCentres: any[], locationHex: string, nationName: string | undefined, t: TFunc): string | null {
   const pc = populationCentres.find((p: any) => p.locationHex === locationHex);
   if (!pc) return null;
-  const fort = pc.fortification ? ` / ${pc.fortification}` : '';
-  return t('char.pcSentence', { size: pc.size, fort, name: pc.name, owner: nationName || 'us' });
+  const fort = pc.fortification ? ` / ${fortLabel(pc.fortification, t)}` : '';
+  return t('char.pcSentence', { size: pcSizeLabel(pc.size, t), fort, name: pc.name, owner: nationName || 'us' });
 }
 
 // ═══════════════════════════════════════════
@@ -1123,11 +1116,11 @@ function CitiesTab({ populationCentres, hexTiles, taxRate }: { populationCentres
               </h3>
             </div>
             <p className="text-sm text-gray-400 mt-1">
-              {t('city.loc', { h: pc.locationHex, t: terrainAt(hexTiles, pc.locationHex) })}
+              {t('city.loc', { h: pc.locationHex, t: terrainLabel(terrainAt(hexTiles, pc.locationHex), t) })}
             </p>
             <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 mt-3 text-sm">
-              <div><dt className="inline text-gray-500">{t('city.size')} </dt><dd className="inline text-gray-200 capitalize">{pc.size}</dd></div>
-              <div><dt className="inline text-gray-500">{t('city.fort')} </dt><dd className="inline text-gray-200">{pc.fortification || t('city.none2')}</dd></div>
+              <div><dt className="inline text-gray-500">{t('city.size')} </dt><dd className="inline text-gray-200">{pcSizeLabel(pc.size, t)}</dd></div>
+              <div><dt className="inline text-gray-500">{t('city.fort')} </dt><dd className="inline text-gray-200">{pc.fortification ? fortLabel(pc.fortification, t) : t('city.none2')}</dd></div>
               <div><dt className="inline text-gray-500">{t('city.loyalty')} </dt><dd className="inline text-gray-200">{pc.loyalty}</dd></div>
               <div><dt className="inline text-gray-500">{t('city.docks')} </dt><dd className="inline text-gray-200">{docks(pc)}</dd></div>
               <div><dt className="inline text-gray-500">{t('city.hidden')} </dt><dd className="inline text-gray-200">{pc.isHidden ? t('city.yes') : t('city.no')}</dd></div>
@@ -1230,7 +1223,7 @@ function ArmyCharChip({ c, isCommander, t }: { c: any; isCommander: boolean; t: 
       }
     >
       <span className="block text-white font-bold text-sm">{c.name}{isCommander ? t('army.commanderMark') : ''}</span>
-      <span className="block text-xs text-gray-400 mt-0.5">{c.type ?? ''}</span>
+      <span className="block text-xs text-gray-400 mt-0.5">{charTypeLabel(c.type, t)}</span>
       <span className="block text-sm text-gray-200 mt-1">
         {t('army.cmdSkills', { c: c.commandSkill ?? 0, a: c.agentSkill ?? 0, e: c.emissarySkill ?? 0, m: c.mageSkill ?? 0 })}
       </span>
@@ -1385,13 +1378,14 @@ function Tip({ trigger, children }: { trigger: React.ReactNode; children: React.
 }
 
 function ArtifactChip({ a, holder, nationName, t }: { a: any; holder: string; nationName?: string; t: TFunc }) {
+  const { lang } = useLang();
+  const primary = lang === 'es' ? (a.primaryEs ?? a.primaryBenefit ?? a.PrimaryBenefit) : (a.primaryBenefit ?? a.PrimaryBenefit);
+  const secondary = lang === 'es' ? (a.secondaryEs ?? a.secondaryPower ?? a.SecondaryPower) : (a.secondaryPower ?? a.SecondaryPower);
   const type = a.type ?? a.Type;
   const bonus = a.bonus ?? a.Bonus ?? 0;
   const alignment = a.alignment ?? a.Alignment;
   const loc = a.locationHex ?? a.LocationHex;
   const wikiId = a.wikiId ?? a.WikiId;
-  const primary = a.primaryBenefit ?? a.PrimaryBenefit;
-  const secondary = a.secondaryPower ?? a.SecondaryPower;
   return (
     <Tip
       trigger={
@@ -1405,7 +1399,7 @@ function ArtifactChip({ a, holder, nationName, t }: { a: any; holder: string; na
       {primary && <span className="block text-sm text-gray-200 mt-1">{primary}</span>}
       {secondary && secondary !== '-' && <span className="block text-sm text-gray-200">{secondary}</span>}
       <span className="block text-sm text-gray-200 mt-1">{t('char.artBonus', { x: bonus })}</span>
-      {alignment && <span className="block text-sm text-gray-200">{t('char.artAlignment', { x: alignment })}</span>}
+      {alignment && <span className="block text-sm text-gray-200">{t('char.artAlignment', { x: alignmentValue(alignment, t) })}</span>}
       {loc && <span className="block text-sm text-gray-200">{t('char.artLocation', { x: loc })}</span>}
       {nationName && <span className="block text-sm text-gray-200">{t('char.artNation', { x: nationName })}</span>}
       <span className="block text-sm text-gray-200">{t('char.artHolder', { x: holder })}</span>
@@ -1414,15 +1408,17 @@ function ArtifactChip({ a, holder, nationName, t }: { a: any; holder: string; na
 }
 
 function SpellChip({ s, t }: { s: any; t: TFunc }) {
+  const { lang } = useLang();
+  const es = lang === 'es';
   const id = s.spellId ?? s.SpellId;
   const info = SPELL_DEFINITIONS.find((d: any) => d.id === id);
-  const college = s.wikiCollege ?? info?.category ?? s.college ?? '';
+  const college = es ? (s.collegeEs ?? s.wikiCollege ?? info?.category ?? s.college ?? '') : (s.wikiCollege ?? info?.category ?? s.college ?? '');
   const minRank = s.minRank ?? info?.minCastingRank;
-  const difficulty = s.difficulty;
-  const castOrder = s.castOrder;
-  const prereqs = s.prerequisites;
-  const reqInfo = s.requiredInfo;
-  const effect = s.effect ?? info?.description;
+  const difficulty = es ? (s.difficultyEs ?? s.difficulty) : s.difficulty;
+  const castOrder = es ? (s.castOrderEs ?? s.castOrder) : s.castOrder;
+  const prereqs = es ? (s.prerequisitesEs ?? s.prerequisites) : s.prerequisites;
+  const reqInfo = es ? (s.requiredInfoEs ?? s.requiredInfo) : s.requiredInfo;
+  const effect = es ? (s.effectEs ?? s.effect ?? info?.description) : (s.effect ?? info?.description);
   return (
     <Tip
       trigger={
@@ -1484,7 +1480,7 @@ function CharactersTab({ characters, armies, populationCentres, nationName, nati
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xl font-bold text-white">{char.name}</h3>
               <span className={`text-xs px-2 py-1 rounded text-white ${typeColor[char.type] || 'bg-gray-600'}`}>
-                {char.type}
+                {charTypeLabel(char.type, t)}
               </span>
               {char.isChampion && <span className="text-xs px-2 py-1 rounded bg-yellow-600 text-white">{t('char.champion')}</span>}
               {char.isDead && <span className="text-xs px-2 py-1 rounded bg-red-600 text-white">{t('char.dead')}</span>}

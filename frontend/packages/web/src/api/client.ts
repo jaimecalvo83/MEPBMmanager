@@ -74,19 +74,27 @@ export const gamesApi = {
     api.delete(`/games/${gameId}/players/${playerId}`),
 };
 
+const orderLang = () => {
+  try {
+    return localStorage.getItem('mepbm-lang') === 'es' ? 'es' : 'en';
+  } catch {
+    return 'en';
+  }
+};
+
 export const ordersApi = {
   list: (gameId: string) =>
     api.get(`/games/${gameId}/orders`),
   submit: (gameId: string, data: { characterId: string; code: number; parameters?: Record<string, unknown>; armyId?: string }) =>
-    api.post(`/games/${gameId}/orders`, data),
+    api.post(`/games/${gameId}/orders?lang=${orderLang()}`, data),
   eligible: (gameId: string, characterId: string) =>
-    api.get(`/games/${gameId}/orders/eligible`, { params: { characterId } }),
+    api.get(`/games/${gameId}/orders/eligible`, { params: { characterId, lang: orderLang() } }),
   estimate: (gameId: string, data: { characterId: string; code: number; parameters?: Record<string, unknown>; armyId?: string; navyId?: string; afterOrder?: { code: number; parameters?: Record<string, unknown> } }) =>
-    api.post(`/games/${gameId}/orders/estimate`, data),
+    api.post(`/games/${gameId}/orders/estimate?lang=${orderLang()}`, data),
   cancel: (gameId: string, orderId: string) =>
     api.delete(`/games/${gameId}/orders/${orderId}`),
   validate: (gameId: string) =>
-    api.post(`/games/${gameId}/orders/validate`),
+    api.post(`/games/${gameId}/orders/validate?lang=${orderLang()}`),
 };
 
 export const messagesApi = {

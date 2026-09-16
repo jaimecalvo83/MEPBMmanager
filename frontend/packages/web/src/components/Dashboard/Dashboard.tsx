@@ -4,7 +4,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useGames, useCreateGame } from '../../hooks/useGames';
 import { useQueryClient } from 'react-query';
 import { gamesApi } from '../../api/client';
-import { useLang, LanguageSwitcher } from '../../i18n/lang';
+import { useLang, LanguageSwitcher, roleLabel, statusLabel } from '../../i18n/lang';
 
 export default function Dashboard() {
   const { t } = useLang();
@@ -79,7 +79,7 @@ const handleCreate = async () => {
         <div className="flex items-center gap-4">
           <span className="text-gray-400">{user?.username}</span>
           <span className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-300">
-            {user?.role}
+            {roleLabel(user?.role, t)}
           </span>
           <LanguageSwitcher small />
           <button onClick={logout} className="text-sm text-gray-500 hover:text-red-400 transition">
@@ -250,7 +250,7 @@ setShowCreate(false);
                           : 'text-gray-500'
                         }`}
                     >
-                      {game.status}
+                      {statusLabel(game.status, t)}
                     </span>
                   </p>
                   <p>{t('dash.turn')} {game.currentTurn || '-'}</p>

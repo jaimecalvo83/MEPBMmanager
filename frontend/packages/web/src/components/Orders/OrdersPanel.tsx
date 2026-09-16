@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOrders, useSubmitOrder, useCancelOrder, useValidateOrders, useEligibleOrders, useOrderEstimate, OrderFieldSpec } from '../../hooks/useOrders';
 import { ORDER_DEFINITIONS } from '@MEPBMmanager/shared';
 import { ORDER_SCHEMAS } from './orderSchemas';
-import { OrderDropdownTip, OrderInfoTip } from './OrderInfoTip';
+import { OrderDropdownTip, OrderInfoTip, orderName, orderHelp } from './OrderInfoTip';
 import SearchSelect from './SearchSelect';
 import { useQueryClient } from 'react-query';
-import { useLang } from '../../i18n/lang';
+import { useLang, charTypeLabel } from '../../i18n/lang';
 
 interface Character {
   id: string;
@@ -55,7 +55,7 @@ function OrderComposer({
   slotLabel: string;
   onSubmitted: () => void;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const queryClient = useQueryClient();
   const submitOrder = useSubmitOrder(gameId);
   const [orderCode, setOrderCode] = useState<number>(0);
@@ -227,7 +227,7 @@ function OrderComposer({
         value={orderCode > 0 ? String(orderCode) : ''}
         options={availableOrders.map((order) => ({
           value: String(order.code),
-          label: `[${order.code}] ${order.abbreviation} - ${order.name}`,
+          label: `[${order.code}] ${order.abbreviation} - ${orderName(order.code, lang)}`,
           tooltip: <OrderDropdownTip gameId={gameId} characterId={character.id} code={order.code} />,
         }))}
         onChange={(v) => {
@@ -241,8 +241,8 @@ function OrderComposer({
           <OrderInfoTip code={orderCode} requires={est?.requires} />
         </div>
       )}
-      {schema?.help && orderCode > 0 && (
-        <p className="text-xs text-gray-400 italic">{schema.help}</p>
+      {orderHelp(orderCode, lang) && orderCode > 0 && (
+        <p className="text-xs text-gray-400 italic">{orderHelp(orderCode, lang)}</p>
       )}
 
       {orderCode > 0 && estimate.isLoading && (
@@ -320,7 +320,7 @@ function CharacterOrderCard({
         <div>
           <span className="font-bold text-white">{character.name}</span>
           <span className="ml-2 text-xs text-gray-400">
-            ({character.type}) C:{character.commandSkill} A:{character.agentSkill} E:{character.emissarySkill} M:{character.mageSkill} @ {character.locationHex}
+            ({charTypeLabel(character.type, t)}) C:{character.commandSkill} A:{character.agentSkill} E:{character.emissarySkill} M:{character.mageSkill} @ {character.locationHex}
           </span>
         </div>
         <span className="text-xs text-gray-500">{t('ord.ordersCount', { n: pending.length })}</span>

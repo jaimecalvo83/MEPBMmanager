@@ -6,6 +6,7 @@ export * from './types/orders';
 export * from './types/spells';
 export * from './types/common';
 export * from './constants/orders';
+export * from './constants/orders.es';
 export * from './constants/troops';
 export * from './constants/spells';
 export * from './constants/nations';

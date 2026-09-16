@@ -8,7 +8,7 @@ import {
   MAP2950_FORD_SIDES,
   MAP2950_BRIDGE_SIDES,
 } from '@MEPBMmanager/shared';
-import { useLang } from '../../i18n/lang';
+import { useLang, terrainLabel } from '../../i18n/lang';
 
 interface HexTile {
   q: number;
@@ -431,7 +431,7 @@ export default function HexMap({ hexes, armies = [], characters = [], population
         {Object.entries(TERRAIN_COLORS).map(([terrain, color]) => (
           <div key={terrain} className="flex items-center gap-2">
             <div className="w-4 h-4 rounded" style={{ backgroundColor: color }} />
-            <span className="capitalize">{terrain}</span>
+            <span className="capitalize">{terrainLabel(terrain, t)}</span>
           </div>
         ))}
         <div className="border-t border-gray-700 my-2 pt-2 space-y-1">

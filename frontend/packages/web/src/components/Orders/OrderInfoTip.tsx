@@ -1,9 +1,27 @@
 import { useEffect, useState } from 'react';
-import { ORDER_DEFINITIONS } from '@MEPBMmanager/shared';
+import { ORDER_DEFINITIONS, ORDER_ES, ORDER_HELP_ES } from '@MEPBMmanager/shared';
 import type { OrderRestriction } from '@MEPBMmanager/shared';
 import { ORDER_SCHEMAS } from './orderSchemas';
 import { useOrderEstimate, type OrderFieldSpec } from '../../hooks/useOrders';
-import { useLang, type TFunc } from '../../i18n/lang';
+import { useLang, difficultyLabel, type TFunc } from '../../i18n/lang';
+
+export function orderName(code: number, lang: string): string {
+  const def = ORDER_DEFINITIONS.find((d) => d.code === code);
+  if (lang === 'es') return ORDER_ES[code]?.name ?? def?.name ?? `#${code}`;
+  return def?.name ?? `#${code}`;
+}
+
+function orderDesc(code: number, lang: string): string {
+  const def = ORDER_DEFINITIONS.find((d) => d.code === code);
+  if (lang === 'es') return ORDER_ES[code]?.desc ?? def?.description ?? '';
+  return def?.description ?? '';
+}
+
+export function orderHelp(code: number, lang: string): string | undefined {
+  const schema = ORDER_SCHEMAS[code];
+  if (lang === 'es') return ORDER_HELP_ES[code] ?? schema?.help;
+  return schema?.help;
+}
 
 // ── Static prerequisites (mirror backend CheckEligible + resolve) ──
 const CAPITAL_ORDERS = new Set([175, 180, 185, 280, 300, 325, 660, 725, 728, 731, 734, 737]);
@@ -85,16 +103,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 // Shared 6-section body: title / type / difficulty / prerequisites / required info / description.
 export function OrderTipBody({ code, requires }: { code: number; requires?: OrderFieldSpec[] | null }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const def = ORDER_DEFINITIONS.find((d) => d.code === code);
-  const schema = ORDER_SCHEMAS[code];
   if (!def) return <span className="text-mepbm-gold">[{code}]</span>;
   const prereqs = orderPrereqs(code, t);
+  const help = orderHelp(code, lang);
   return (
     <span>
-      <span className="block text-mepbm-gold font-bold text-sm">[{def.code}] {def.name}</span>
+      <span className="block text-mepbm-gold font-bold text-sm">[{def.code}] {orderName(code, lang)}</span>
       <Section title={t('ord.tipType')}>{orderType(code, t)}</Section>
-      <Section title={t('ord.tipDifficulty')}>{def.difficulty}{def.skillIncrease ? t('ord.skillPlus') : ''}</Section>
+      <Section title={t('ord.tipDifficulty')}>{difficultyLabel(def.difficulty, t)}{def.skillIncrease ? t('ord.skillPlus') : ''}</Section>
       {prereqs.length > 0 && (
         <Section title={t('ord.tipPrereq')}>
           {prereqs.map((p) => (
@@ -110,8 +128,8 @@ export function OrderTipBody({ code, requires }: { code: number; requires?: Orde
         </Section>
       )}
       <Section title={t('ord.tipDesc')}>
-        {def.description}
-        {schema?.help && <span className="block text-xs text-gray-400 italic mt-1">{schema.help}</span>}
+        {orderDesc(code, lang)}
+        {help && <span className="block text-xs text-gray-400 italic mt-1">{help}</span>}
       </Section>
     </span>
   );
@@ -122,9 +140,10 @@ export function OrderInfoTip({ code, requires }: {
   code: number;
   requires?: OrderFieldSpec[] | null;
 }) {
+  const { lang } = useLang();
   return (
     <span className="relative inline-block group/tip">
-      <span className="text-mepbm-gold cursor-help">[{code}] {ORDER_DEFINITIONS.find((d) => d.code === code)?.name ?? ''}</span>
+      <span className="text-mepbm-gold cursor-help">[{code}] {orderName(code, lang)}</span>
       <span className="hidden group-hover/tip:block absolute left-0 top-full mt-1 z-30 w-80 max-w-[80vw] rounded-none bg-gray-900 border-2 border-mepbm-gold p-3 text-left shadow-xl">
         <OrderTipBody code={code} requires={requires} />
       </span>

@@ -1358,7 +1358,9 @@ public class GamesController : ControllerBase
                 artifacts = c.Artifacts.Select(a => new { a.Id, a.Name, a.Type, a.Bonus, a.Alignment, a.LocationHex, a.NationId,
                     wikiId = ArtifactCatalog2950.Find(a.Name)?.Id,
                     primaryBenefit = ArtifactCatalog2950.Find(a.Name)?.Primary,
-                    secondaryPower = ArtifactCatalog2950.Find(a.Name)?.Secondary }),
+                    secondaryPower = ArtifactCatalog2950.Find(a.Name)?.Secondary,
+                    primaryEs = ArtifactCatalog2950Es.FindByName(a.Name)?.Primary,
+                    secondaryEs = ArtifactCatalog2950Es.FindByName(a.Name)?.Secondary }),
                 spells = c.Spells.Where(s => s.IsKnown).Select(s => new
                 {
                     s.SpellId,
@@ -1371,7 +1373,13 @@ public class GamesController : ControllerBase
                     castOrder = SpellCatalog.Get(s.SpellId)?.CastOrder,
                     prerequisites = SpellCatalog.Get(s.SpellId)?.Prerequisites,
                     requiredInfo = SpellCatalog.Get(s.SpellId)?.RequiredInfo,
-                    effect = SpellCatalog.Get(s.SpellId)?.Effect
+                    effect = SpellCatalog.Get(s.SpellId)?.Effect,
+                    collegeEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se0) ? se0.College : null,
+                    difficultyEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se1) ? se1.Difficulty : null,
+                    castOrderEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se2) ? se2.CastOrder : null,
+                    prerequisitesEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se3) ? se3.Prerequisites : null,
+                    requiredInfoEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se4) ? se4.RequiredInfo : null,
+                    effectEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se5) ? se5.Effect : null
                 })
             }),
             armies = armies.Select(a => new
