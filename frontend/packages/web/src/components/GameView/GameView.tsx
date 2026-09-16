@@ -8,6 +8,7 @@ import HexMap from '../Map/HexMap';
 import OrdersPanel from '../Orders/OrdersPanel';
 import MessagesPanel from '../Messages/MessagesPanel';
 import NationPicker from '../NationPicker/NationPicker';
+import { SPELL_DEFINITIONS } from '@MEPBMmanager/shared';
 
 interface PlayerInfo {
   id: string;
@@ -1214,6 +1215,65 @@ function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName
 // ═══════════════════════════════════════════
 // CHARACTERS TAB (turn-0 style cards)
 // ═══════════════════════════════════════════
+function Tip({ trigger, children }: { trigger: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span className="relative inline-block group/tip">
+      <span className="cursor-help">{trigger}</span>
+      <span className="hidden group-hover/tip:block absolute left-0 top-full mt-1 z-30 w-72 max-w-[80vw] rounded-none bg-gray-900 border-2 border-mepbm-gold p-3 text-left shadow-xl">
+        {children}
+      </span>
+    </span>
+  );
+}
+
+function ArtifactChip({ a }: { a: any }) {
+  return (
+    <Tip
+      trigger={
+        <span className="inline-block px-2 py-1 rounded bg-gray-700 border border-amber-600/60 text-xs text-amber-200">
+          {a.name ?? a.Name ?? '?'}
+        </span>
+      }
+    >
+      <span className="block text-amber-200 font-bold text-sm">{a.name ?? a.Name ?? 'Artifact'}</span>
+      {(a.type ?? a.Type) && <span className="block text-xs text-gray-400 mt-0.5">{a.type ?? a.Type}</span>}
+      <span className="block text-sm text-gray-200 mt-1">
+        Bonus +{a.bonus ?? a.Bonus ?? 0}
+        {((a.alignment ?? a.Alignment) && (a.alignment ?? a.Alignment) !== 'none') ? ` · ${(a.alignment ?? a.Alignment)}` : ''}
+      </span>
+    </Tip>
+  );
+}
+
+function SpellChip({ s }: { s: any }) {
+  const id = s.spellId ?? s.SpellId;
+  const info = SPELL_DEFINITIONS.find((d: any) => d.id === id);
+  return (
+    <Tip
+      trigger={
+        <span className="inline-block px-2 py-1 rounded bg-gray-700 border border-violet-500/60 text-xs text-violet-200">
+          #{id} {s.name ?? s.Name ?? info?.name ?? '?'} <span className="text-gray-400">({s.rank ?? s.Rank ?? 0})</span>
+        </span>
+      }
+    >
+      <span className="block text-violet-200 font-bold text-sm">#{id} {s.name ?? s.Name ?? info?.name ?? 'Spell'}</span>
+      <span className="block text-xs text-gray-400 mt-0.5">
+        {s.college ?? info?.category ?? ''}{info?.minCastingRank != null ? ` · min rank ${info.minCastingRank}` : ''} · rank {s.rank ?? s.Rank ?? 0}
+      </span>
+      {info?.description && <span className="block text-sm text-gray-200 mt-1">{info.description}</span>}
+    </Tip>
+  );
+}
+
+function StatBox({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="bg-gray-900 rounded px-3 py-2 border border-gray-700">
+      <div className="text-[11px] uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="text-lg font-bold text-white leading-tight">{value}</div>
+    </div>
+  );
+}
+
 function CharactersTab({ characters, armies, populationCentres, nationName }: {
   characters: any[]; armies: any[]; populationCentres: any[]; nationName?: string;
 }) {
@@ -1232,36 +1292,73 @@ function CharactersTab({ characters, armies, populationCentres, nationName }: {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {characters.map((char: any) => {
         const army = char.armyId ? armyById.get(char.armyId) : null;
         const pcLine = pcSentence(populationCentres, char.locationHex, nationName);
         const artifacts: any[] = char.artifacts || [];
         const spells: any[] = char.spells || [];
         return (
-          <div key={char.id} className="bg-gray-800 rounded-lg p-5 border border-gray-700">
+          <div key={char.id} className="bg-gray-800 rounded-lg p-5 border border-gray-700 space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-lg font-bold text-white">{char.name}</h3>
+              <h3 className="text-xl font-bold text-white">{char.name}</h3>
               <span className={`text-xs px-2 py-1 rounded text-white ${typeColor[char.type] || 'bg-gray-600'}`}>
                 {char.type}
               </span>
               {char.isChampion && <span className="text-xs px-2 py-1 rounded bg-yellow-600 text-white">Champion</span>}
               {char.isDead && <span className="text-xs px-2 py-1 rounded bg-red-600 text-white">Dead</span>}
               {char.isKidnapped && <span className="text-xs px-2 py-1 rounded bg-orange-600 text-white">Kidnapped</span>}
+              <span className="ml-auto text-xs px-2 py-1 rounded bg-gray-900 border border-gray-600 text-gray-300">
+                @ {char.locationHex}
+              </span>
             </div>
-            <p className="text-sm text-gray-200 mt-2">
-              Ranks: Command {char.commandSkill} · Agent {char.agentSkill} · Emissary {char.emissarySkill} · Mage {char.mageSkill}
-            </p>
-            <p className="text-sm text-gray-300">
-              Health {char.health} · Stealth {char.stealth ?? 0} · Challenge {char.challengeRank ?? 0}
-            </p>
-            <p className="text-sm text-gray-300">
-              Artifacts: {artifacts.length > 0 ? artifacts.map((a: any) => a.name).join(', ') : '—'}
-            </p>
-            <p className="text-sm text-gray-300">
-              Spells: {spells.length > 0 ? spells.map((s: any) => `#${s.spellId} ${s.name} (${s.rank ?? 0})`).join(', ') : '—'}
-            </p>
-            <p className="text-sm text-gray-400 mt-1">
+
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Skills</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <StatBox label="Command" value={char.commandSkill} />
+                <StatBox label="Agent" value={char.agentSkill} />
+                <StatBox label="Emissary" value={char.emissarySkill} />
+                <StatBox label="Mage" value={char.mageSkill} />
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Status</div>
+              <div className="grid grid-cols-3 gap-2 max-w-md">
+                <StatBox label="Health" value={`${char.health ?? '?'}${char.maxHealth ? ` / ${char.maxHealth}` : ''}`} />
+                <StatBox label="Stealth" value={char.stealth ?? 0} />
+                <StatBox label="Challenge" value={char.challengeRank ?? 0} />
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">
+                Artifacts{artifacts.length > 0 ? ` (${artifacts.length})` : ''}
+              </div>
+              {artifacts.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {artifacts.map((a: any) => <ArtifactChip key={a.id ?? a.Id ?? a.name} a={a} />)}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">—</p>
+              )}
+            </div>
+
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">
+                Spells{spells.length > 0 ? ` (${spells.length})` : ''}
+              </div>
+              {spells.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {spells.map((s: any) => <SpellChip key={s.spellId ?? s.SpellId} s={s} />)}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">—</p>
+              )}
+            </div>
+
+            <p className="text-sm text-gray-400 border-t border-gray-700 pt-3">
               {army ? `${char.name} commands an army at ${char.locationHex}.` : `${char.name} is currently at ${char.locationHex}.`}
               {pcLine ? ` ${pcLine}` : ''}
             </p>

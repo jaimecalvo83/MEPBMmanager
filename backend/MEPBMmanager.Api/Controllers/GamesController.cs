@@ -1355,12 +1355,13 @@ public class GamesController : ControllerBase
                 c.HeldByNationId,
                 c.CompanyId,
                 c.ArmyId,
-                artifacts = c.Artifacts.Select(a => new { a.Id, a.Name }),
+                artifacts = c.Artifacts.Select(a => new { a.Id, a.Name, a.Type, a.Bonus, a.Alignment }),
                 spells = c.Spells.Where(s => s.IsKnown).Select(s => new
                 {
                     s.SpellId,
                     name = SpellCatalog.Get(s.SpellId)?.Name ?? $"Spell {s.SpellId}",
-                    s.Rank
+                    s.Rank,
+                    college = SpellCatalog.Get(s.SpellId)?.Type.ToString()
                 })
             }),
             armies = armies.Select(a => new
