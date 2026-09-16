@@ -116,11 +116,12 @@ export default function SearchSelect({
           {open && tip?.node != null && (() => {
             const w = 320;
             const left = Math.max(8, Math.min(tip.x + 16, window.innerWidth - w - 8));
-            const top = Math.max(8, Math.min(tip.y + 16, window.innerHeight - 220));
+            const flip = tip.y > window.innerHeight - 300;
+            const top = flip ? Math.max(8, tip.y - 16) : tip.y + 16;
             return (
               <div
-                className="fixed z-50 w-80 max-w-[80vw] max-h-56 overflow-y-auto rounded-none bg-gray-900 border-2 border-mepbm-gold p-3 text-left shadow-xl pointer-events-none"
-                style={{ left, top }}
+                className="fixed z-50 w-80 max-w-[80vw] rounded-none bg-gray-900 border-2 border-mepbm-gold p-3 text-left shadow-xl pointer-events-none"
+                style={{ left, top, transform: flip ? 'translateY(-100%)' : undefined }}
               >
                 {tip.node}
               </div>

@@ -116,7 +116,7 @@ export function OrderInfoTip({ code, requires }: {
   return (
     <span className="relative inline-block group/tip">
       <span className="text-mepbm-gold cursor-help">[{code}] {ORDER_DEFINITIONS.find((d) => d.code === code)?.name ?? ''}</span>
-      <span className="hidden group-hover/tip:block absolute left-0 top-full mt-1 z-30 w-80 max-w-[80vw] max-h-96 overflow-y-auto rounded-none bg-gray-900 border-2 border-mepbm-gold p-3 text-left shadow-xl">
+      <span className="hidden group-hover/tip:block absolute left-0 top-full mt-1 z-30 w-80 max-w-[80vw] rounded-none bg-gray-900 border-2 border-mepbm-gold p-3 text-left shadow-xl">
         <OrderTipBody code={code} requires={requires} />
       </span>
     </span>
