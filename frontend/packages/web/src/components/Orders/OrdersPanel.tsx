@@ -5,7 +5,7 @@ import { ORDER_SCHEMAS } from './orderSchemas';
 import { OrderDropdownTip, OrderInfoTip, orderName, orderHelp } from './OrderInfoTip';
 import SearchSelect from './SearchSelect';
 import { useQueryClient } from 'react-query';
-import { useLang, charTypeLabel } from '../../i18n/lang';
+import { useLang, charTypeLabel, statusLabel } from '../../i18n/lang';
 
 interface Character {
   id: string;
@@ -415,7 +415,7 @@ function PendingOrderLine({ gameId, characterId, order, index, onChanged }: {
         />
         {' '}
         <span className="text-gray-400">{describeParams(stored, est.data?.requires, t)}</span>
-        {order.status !== 'pending' && <span className="ml-2 text-xs text-gray-500">({order.status})</span>}
+        {order.status !== 'pending' && <span className="ml-2 text-xs text-gray-500">({statusLabel(order.status, t)})</span>}
       </span>
       {order.status === 'pending' && (
         <button

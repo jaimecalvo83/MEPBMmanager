@@ -280,6 +280,7 @@ const en = {
   'char.artifacts': 'Artifacts',
   'char.spells': 'Spells',
   'char.pcSentence': 'The {size}{fort} of {name} flying the flag of {owner} is here.',
+  'char.us': 'us',
   'char.artBonus': 'Bonus +{x}',
   'char.artAlignment': 'Alignment: {x}',
   'char.artLocation': 'Location: {x}',
@@ -387,6 +388,10 @@ const en = {
   'data.stOrdersOpen': 'Orders open',
   'data.stProcessing': 'Processing',
   'data.stCompleted': 'Completed',
+  'data.stPending': 'Pending',
+  'data.stValidated': 'Validated',
+  'data.stExecuted': 'Executed',
+  'data.stFailed': 'Failed',
   'data.terrPlains': 'Plains',
   'data.terrForest': 'Forest',
   'data.terrMountains': 'Mountains',
@@ -674,6 +679,7 @@ const es: Record<DictKey, string> = {
   'char.artifacts': 'Artefactos',
   'char.spells': 'Hechizos',
   'char.pcSentence': 'El {size}{fort} de {name} ondea la bandera de {owner}.',
+  'char.us': 'nosotros',
   'char.artBonus': 'Bonus +{x}',
   'char.artAlignment': 'Alineamiento: {x}',
   'char.artLocation': 'Lugar: {x}',
@@ -780,6 +786,10 @@ const es: Record<DictKey, string> = {
   'data.stOrdersOpen': 'Órdenes abiertas',
   'data.stProcessing': 'Procesando',
   'data.stCompleted': 'Completada',
+  'data.stPending': 'Pendiente',
+  'data.stValidated': 'Validada',
+  'data.stExecuted': 'Ejecutada',
+  'data.stFailed': 'Fallida',
   'data.terrPlains': 'Llanos',
   'data.terrForest': 'Bosque',
   'data.terrMountains': 'Montañas',
@@ -905,6 +915,10 @@ export function statusLabel(s: string | undefined, t: TFunc): string {
     case 'orders_open': return t('data.stOrdersOpen');
     case 'processing': return t('data.stProcessing');
     case 'completed': return t('data.stCompleted');
+    case 'pending': return t('data.stPending');
+    case 'validated': return t('data.stValidated');
+    case 'executed': return t('data.stExecuted');
+    case 'failed': return t('data.stFailed');
     default: return s ?? '';
   }
 }
@@ -949,6 +963,43 @@ export function alignmentValue(v: string | undefined, t: TFunc): string {
     case 'evil': return t('data.alEvil');
     default: return v ?? '';
   }
+}
+
+const NATION_ES: Record<string, string> = {
+  'woodmen': 'Hombres del Bosque',
+  'northmen': 'Hombres del Norte',
+  'riders of rohan': 'Jinetes de Rohan',
+  'dúnadan rangers': 'Montaraces Dúnedain',
+  'dunadan rangers': 'Montaraces Dúnedain',
+  'silvan elves': 'Elfos Silvanos',
+  'northern gondor': 'Gondor del Norte',
+  'southern gondor': 'Gondor del Sur',
+  'dwarves': 'Enanos',
+  'sinda elves': 'Elfos Sindar',
+  'noldo elves': 'Elfos Noldor',
+  'witch-king': 'Rey Brujo',
+  'witch king': 'Rey Brujo',
+  'dragon lord': 'Señor de los Dragones',
+  'dog lord': 'Señor de los Perros',
+  'cloud lord': 'Señor de las Nubes',
+  'blind sorcerer': 'Hechicero Ciego',
+  'ice king': 'Rey de Hielo',
+  'quiet avenger': 'Vengador Silencioso',
+  'fire king': 'Rey del Fuego',
+  'long rider': 'Jinete Largo',
+  'dark lieutenants': 'Lugartenientes Oscuros',
+  'corsairs': 'Corsarios',
+  'rhûn easterlings': 'Orientales de Rhûn',
+  'rhun easterlings': 'Orientales de Rhûn',
+  'dunlendings': 'Dunlendinos',
+  'white wizard': 'Mago Blanco',
+  'khand easterlings': 'Orientales de Khand',
+};
+
+export function nationName(name: string | undefined, lang: string): string {
+  if (!name) return '';
+  if (lang !== 'es') return name;
+  return NATION_ES[name.toLowerCase()] ?? name;
 }
 
 export function roleLabel(role: string | undefined, t: TFunc): string {

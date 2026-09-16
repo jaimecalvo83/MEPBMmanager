@@ -1297,7 +1297,7 @@ public class GamesController : ControllerBase
         var abilities = new List<object>();
         if (activeNation != null && NationAbilities.SlugByDisplayName.TryGetValue(activeNation.Name, out var slug)
             && NationAbilities.ByNationSlug.TryGetValue(slug, out var ids))
-            abilities.AddRange(ids.Select(a => new { id = a, name = NationAbilities.DisplayNames.TryGetValue(a, out var n) ? n : a }));
+            abilities.AddRange(ids.Select(a => new { id = a, name = NationAbilities.DisplayNames.TryGetValue(a, out var n) ? n : a, nameEn = NationAbilities.DisplayNamesEn.TryGetValue(a, out var e) ? e : a }));
 
         // ── Basic roster (all nations) for tabs like Relations ──
         var allNations = await _db.Nations

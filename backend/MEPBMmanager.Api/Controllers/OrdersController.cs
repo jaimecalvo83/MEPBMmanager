@@ -526,6 +526,39 @@ public class OrdersController : ControllerBase
         "neutral" => L(lang, "Neutral", "Neutral"),
         _ => al ?? "?"
     };
+    private static readonly Dictionary<string, string> NationEs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Woodmen"] = "Hombres del Bosque",
+        ["Northmen"] = "Hombres del Norte",
+        ["Riders of Rohan"] = "Jinetes de Rohan",
+        ["Dúnadan Rangers"] = "Montaraces Dúnedain",
+        ["Dunadan Rangers"] = "Montaraces Dúnedain",
+        ["Silvan Elves"] = "Elfos Silvanos",
+        ["Northern Gondor"] = "Gondor del Norte",
+        ["Southern Gondor"] = "Gondor del Sur",
+        ["Dwarves"] = "Enanos",
+        ["Sinda Elves"] = "Elfos Sindar",
+        ["Noldo Elves"] = "Elfos Noldor",
+        ["Witch-king"] = "Rey Brujo",
+        ["Witch King"] = "Rey Brujo",
+        ["Dragon Lord"] = "Señor de los Dragones",
+        ["Dog Lord"] = "Señor de los Perros",
+        ["Cloud Lord"] = "Señor de las Nubes",
+        ["Blind Sorcerer"] = "Hechicero Ciego",
+        ["Ice King"] = "Rey de Hielo",
+        ["Quiet Avenger"] = "Vengador Silencioso",
+        ["Fire King"] = "Rey del Fuego",
+        ["Long Rider"] = "Jinete Largo",
+        ["Dark Lieutenants"] = "Lugartenientes Oscuros",
+        ["Corsairs"] = "Corsarios",
+        ["Rhûn Easterlings"] = "Orientales de Rhûn",
+        ["Rhun Easterlings"] = "Orientales de Rhûn",
+        ["Dunlendings"] = "Dunlendinos",
+        ["White Wizard"] = "Mago Blanco",
+        ["Khand Easterlings"] = "Orientales de Khand",
+    };
+    private static string NationDisplayName(string? lang, string name) =>
+        lang == "es" && NationEs.TryGetValue(name ?? "", out var es) ? es : name;
     private static string CharTypeName(string? lang, string? t) => (t ?? "").ToLower() switch
     {
         "commander" => L(lang, "commander", "comandante"),
@@ -562,7 +595,7 @@ public class OrdersController : ControllerBase
         var foeCharsAtLoc = ctx.Game.Nations.SelectMany(n => n.Characters)
             .Where(c => c.NationId != ctx.Nation.Id && !c.IsDead && c.LocationHex == ctx.EffLoc).ToList();
         var allNations = ctx.Game.Nations
-            .Select(n => new OrderFieldOptionDto(n.Id, $"{n.Name} ({AllegianceName(lng, n.Allegiance)})")).ToList();
+            .Select(n => new OrderFieldOptionDto(n.Id, $"{NationDisplayName(lng, n.Name)} ({AllegianceName(lng, n.Allegiance)})")).ToList();
         var heldArts = ch.Artifacts.Where(a => a.HeldByCharacterId == ch.Id)
             .Select(a => new OrderFieldOptionDto(a.Id, a.Name)).ToList();
         var catalogSpells = SpellCatalog.All

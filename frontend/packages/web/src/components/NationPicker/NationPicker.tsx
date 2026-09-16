@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNations } from '../../hooks/useNations';
 import { useQueryClient } from 'react-query';
 import { gamesApi } from '../../api/client';
-import { useLang, sideLabel } from '../../i18n/lang';
+import { useLang, sideLabel, nationName } from '../../i18n/lang';
 
 interface NationPickerProps {
   gameId: string;
@@ -12,7 +12,7 @@ interface NationPickerProps {
 }
 
 const NationPicker: React.FC<NationPickerProps> = ({ gameId, mode = 'join', onClose, onJoined }) => {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const { data: nations, isLoading } = useNations(gameId);
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
@@ -74,7 +74,7 @@ const NationPicker: React.FC<NationPickerProps> = ({ gameId, mode = 'join', onCl
                       className="inline-block w-4 h-4 rounded-full"
                       style={{ backgroundColor: nation.color || '#888' }}
                     />
-                    <span>{nation.name}</span>
+                    <span>{nationName(nation.name, lang)}</span>
                     {nation.allegiance && (
                       <span className="text-xs opacity-70">({sideLabel(nation.allegiance, t)})</span>
                     )}

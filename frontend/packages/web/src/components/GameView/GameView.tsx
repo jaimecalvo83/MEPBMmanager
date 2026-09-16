@@ -9,7 +9,7 @@ import OrdersPanel from '../Orders/OrdersPanel';
 import MessagesPanel from '../Messages/MessagesPanel';
 import NationPicker from '../NationPicker/NationPicker';
 import { SPELL_DEFINITIONS } from '@MEPBMmanager/shared';
-import { useLang, LanguageSwitcher, sideLabel, charTypeLabel, pcSizeLabel, fortLabel, seasonLabel, statusLabel, terrainLabel, alignmentValue, type TFunc } from '../../i18n/lang';
+import { useLang, LanguageSwitcher, sideLabel, nationName as trNation, charTypeLabel, pcSizeLabel, fortLabel, seasonLabel, statusLabel, terrainLabel, alignmentValue, type TFunc } from '../../i18n/lang';
 
 interface PlayerInfo {
   id: string;
@@ -436,7 +436,7 @@ function SetupView({
 // ACTIVE GAME VIEW
 // ═══════════════════════════════════════════
 function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedNationId, selectedHex, setSelectedHex, activeTab, setActiveTab, navigate }: any) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const nation = gameState?.nation;
   const nations = gameState?.nations || [];
   const characters = gameState?.characters || [];
@@ -496,7 +496,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
                     }`}
                   >
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: n.color }} />
-                    <span className="truncate">{n.name}</span>
+                    <span className="truncate">{trNation(n.name, lang)}</span>
                   </button>
                 ))}
               </div>
@@ -515,7 +515,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
                     }`}
                   >
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: n.color }} />
-                    <span className="truncate">{n.name}</span>
+                    <span className="truncate">{trNation(n.name, lang)}</span>
                   </button>
                 ))}
               </div>
@@ -534,7 +534,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
                     }`}
                   >
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: n.color }} />
-                    <span className="truncate">{n.name}</span>
+                    <span className="truncate">{trNation(n.name, lang)}</span>
                   </button>
                 ))}
               </div>
@@ -582,7 +582,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
             {nation && (
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded" style={{ backgroundColor: nation.color }} />
-                <span className="font-bold text-white">{nation.name}</span>
+                <span className="font-bold text-white">{trNation(nation.name, lang)}</span>
                 <span className="text-sm text-gray-400">({sideLabel(nation.allegiance, t)})</span>
               </div>
             )}
@@ -774,7 +774,7 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
   allNations: any[];
   relations: any[];
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const queryClient = useQueryClient();
   const [savingId, setSavingId] = useState<string | null>(null);
 
@@ -823,7 +823,7 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
                   <td className="px-4 py-3">
                     <span className="text-sm font-medium text-white flex items-center gap-2">
                       <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: n.color }} />
-                      {n.name}
+                      {trNation(n.name, lang)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-300">{sideLabel(n.allegiance, t)}</td>
@@ -926,7 +926,7 @@ function ReportsTab({ gameId, turns }: { gameId: string; turns: any[] }) {
 // STANDINGS TAB (victory points per allegiance)
 // ═══════════════════════════════════════════
 function StandingsTab({ allNations }: { allNations: any[] }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   if (allNations.length === 0) {
     return <div className="text-gray-400">{t('stand.none')}</div>;
   }
@@ -961,7 +961,7 @@ function StandingsTab({ allNations }: { allNations: any[] }) {
                     <td className="px-4 py-2">
                       <span className="text-sm font-medium text-white flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: n.color }} />
-                        {n.name}
+                        {trNation(n.name, lang)}
                         {n.isEliminated && (
                           <span className="text-xs px-2 py-0.5 rounded bg-red-900 text-red-300">{t('stand.eliminated')}</span>
                         )}
@@ -989,7 +989,7 @@ function NationTab({ nation, populationCentres, armies, characters, currentTurn 
   characters: any[];
   currentTurn: any;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   if (!nation) {
     return <div className="text-gray-400">{t('nation.none')}</div>;
   }
@@ -1010,7 +1010,7 @@ function NationTab({ nation, populationCentres, armies, characters, currentTurn 
         <div className="flex items-center gap-3">
           <div className="w-6 h-6 rounded-full" style={{ backgroundColor: nation.color }} />
           <div>
-            <h2 className="text-2xl font-bold text-white">{nation.name}</h2>
+            <h2 className="text-2xl font-bold text-white">{trNation(nation.name, lang)}</h2>
             <p className="text-sm text-gray-400">
               {sideLabel(nation.allegiance, t)}
               {currentTurn ? ` · ${t('game.turnShort', { n: currentTurn.number, s: currentTurn.season ? ` · ${seasonLabel(currentTurn.season, t)}` : '' })}` : ''}
@@ -1039,7 +1039,7 @@ function NationTab({ nation, populationCentres, armies, characters, currentTurn 
           <ul className="list-disc list-inside space-y-1">
             {abilities.map((a: any) => (
               <li key={a.id} className="text-sm text-gray-200">
-                <span className="font-mono text-xs text-gray-500 mr-2">{a.id}</span>{a.name}
+                {lang === 'es' ? a.name : (a.nameEn ?? a.name)}
               </li>
             ))}
           </ul>
@@ -1056,11 +1056,11 @@ function terrainAt(hexTiles: any[], locationHex: string): string {
   return hex ? hex.terrain : '?';
 }
 
-function pcSentence(populationCentres: any[], locationHex: string, nationName: string | undefined, t: TFunc): string | null {
+function pcSentence(populationCentres: any[], locationHex: string, nation: string | undefined, lang: string, t: TFunc): string | null {
   const pc = populationCentres.find((p: any) => p.locationHex === locationHex);
   if (!pc) return null;
   const fort = pc.fortification ? ` / ${fortLabel(pc.fortification, t)}` : '';
-  return t('char.pcSentence', { size: pcSizeLabel(pc.size, t), fort, name: pc.name, owner: nationName || 'us' });
+  return t('char.pcSentence', { size: pcSizeLabel(pc.size, t), fort, name: pc.name, owner: nation ? trNation(nation, lang) : t('char.us') });
 }
 
 // ═══════════════════════════════════════════
@@ -1235,7 +1235,7 @@ function ArmyCharChip({ c, isCommander, t }: { c: any; isCommander: boolean; t: 
 function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName }: {
   armies: any[]; characters: any[]; populationCentres: any[]; hexTiles: any[]; nationName?: string;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   if (armies.length === 0) {
     return <div className="text-gray-400">{t('army.none')}</div>;
   }
@@ -1247,7 +1247,7 @@ function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName
     <div className="space-y-5">
       {armies.map((army: any) => {
         const commander = army.commanderId ? charById.get(army.commanderId) : null;
-        const pcLine = pcSentence(populationCentres, army.locationHex, nationName, t);
+        const pcLine = pcSentence(populationCentres, army.locationHex, nationName, lang, t);
         const members = characters.filter((c: any) => c.armyId === army.id);
         const total = armyTroopTotal(army);
         const eats = armyFoodCost(army);
@@ -1264,7 +1264,7 @@ function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xl font-bold text-white">{army.name}</h3>
               <span className="text-xs px-2 py-1 rounded bg-gray-900 border border-gray-600 text-gray-300">
-                @ {army.locationHex} · {terrainAt(hexTiles, army.locationHex)}
+                @ {army.locationHex} · {terrainLabel(terrainAt(hexTiles, army.locationHex), t)}
               </span>
               <span className="ml-auto text-xs text-gray-400">{t('army.troopsWord', { n: total })}</span>
             </div>
@@ -1451,7 +1451,7 @@ function StatBox({ label, value }: { label: string; value: React.ReactNode }) {
 function CharactersTab({ characters, armies, populationCentres, nationName, nations }: {
   characters: any[]; armies: any[]; populationCentres: any[]; nationName?: string; nations?: any[];
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   if (characters.length === 0) {
     return <div className="text-gray-400">{t('char.none')}</div>;
   }
@@ -1472,7 +1472,7 @@ function CharactersTab({ characters, armies, populationCentres, nationName, nati
     <div className="space-y-5">
       {characters.map((char: any) => {
         const army = char.armyId ? armyById.get(char.armyId) : null;
-        const pcLine = pcSentence(populationCentres, char.locationHex, nationName, t);
+        const pcLine = pcSentence(populationCentres, char.locationHex, nationName, lang, t);
         const artifacts: any[] = char.artifacts || [];
         const spells: any[] = char.spells || [];
         return (

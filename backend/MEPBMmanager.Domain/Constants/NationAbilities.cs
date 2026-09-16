@@ -66,6 +66,43 @@ public static class NationAbilities
             ["khand-easterlings"] = ["NAME_COMMANDER_40", "NEWCHAR_CHALLENGE", "FORCE_MARCH_HARDY"],
         };
 
+    /// <summary>ID → nombre visible (EN).</summary>
+    public static readonly IReadOnlyDictionary<string, string> DisplayNamesEn =
+        new Dictionary<string, string>
+        {
+            ["FORCE_MARCH_NONE"] = "Force march with no morale loss",
+            ["FORCE_MARCH_FED_12"] = "Force march: 1-2 fed, 2-5 unfed",
+            ["FORCE_MARCH_HARDY"] = "Hardy march morale",
+            ["RECRUIT_TRAINING_20"] = "Recruits with training 20",
+            ["RECRUIT_TRAINING_25"] = "Recruits with training 25",
+            ["RECRUIT_TRAINING_HI_30"] = "Heavy infantry recruited with training 30",
+            ["RECRUIT_TRAINING_MA_25"] = "Men-at-arms recruited with training 25",
+            ["NAME_COMMANDER_40"] = "Nameable commanders up to 40 (728)",
+            ["NAME_AGENT_40"] = "Nameable agents up to 40 (731)",
+            ["NAME_EMISSARY_40"] = "Nameable emissaries up to 40 (734)",
+            ["NAME_MAGE_40"] = "Nameable mages up to 40 (737)",
+            ["MARKET_BUY_20"] = "20% cheaper market buys",
+            ["MARKET_SELL_20"] = "20% dearer market sells",
+            ["SHIP_TIMBER_750"] = "Ships for 750 timber",
+            ["SHIP_TIMBER_500"] = "Ships for 500 timber",
+            ["FORT_HALF_TIMBER"] = "Fortifications at half timber",
+            ["SCOUT_DOUBLE"] = "Scout at double range (905-930)",
+            ["SCOUT_AS_50"] = "Scout as rank 50",
+            ["UNCOVER_AS_40"] = "Uncover secrets as rank 40 (585)",
+            ["AGENT_PLUS_20"] = "+20 agent on assassinate/kidnap (615/620)",
+            ["NEWCHAR_STEALTH"] = "Extra stealth on new characters",
+            ["NEWCHAR_CHALLENGE"] = "Extra challenge on new characters",
+            ["LOST_SPELL_508"] = "Learnable: Conjure Mounts (508)",
+            ["LOST_SPELL_244"] = "Learnable: Fearful Hearts (244)",
+            ["LOST_SPELL_512"] = "Learnable: Conjure Hordes (512)",
+            ["LOST_SPELL_314"] = "Learnable: Teleport (314)",
+            ["LOST_SPELL_246"] = "Learnable: Summon Storms (246)",
+            ["LOST_SPELL_248"] = "Learnable: Fanaticism (248)",
+            ["NO_STORMS"] = "Immune to storms and getting lost at sea",
+            ["HIRE_FREE"] = "Free army hire",
+            ["START_MORALE_40"] = "New armies with morale 40",
+        };
+
     /// <summary>ID → nombre visible.</summary>
     public static readonly IReadOnlyDictionary<string, string> DisplayNames =
         new Dictionary<string, string>
