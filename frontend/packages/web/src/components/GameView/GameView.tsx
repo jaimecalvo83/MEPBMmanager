@@ -1147,13 +1147,44 @@ function CitiesTab({ populationCentres, hexTiles, taxRate }: { populationCentres
 // ARMIES TAB (turn-0 style blocks)
 // ═══════════════════════════════════════════
 const TROOP_ROWS = [
-  { key: 'heavyCavalry', label: 'Heavy Cavalry', w: 'hcWeaponRank', a: 'hcArmourRank' },
-  { key: 'lightCavalry', label: 'Light Cavalry', w: 'lcWeaponRank', a: 'lcArmourRank' },
-  { key: 'heavyInfantry', label: 'Heavy Infantry', w: 'hiWeaponRank', a: 'hiArmourRank' },
-  { key: 'lightInfantry', label: 'Light Infantry', w: 'liWeaponRank', a: 'liArmourRank' },
-  { key: 'archers', label: 'Archers', w: 'archerWeaponRank', a: 'archerArmourRank' },
-  { key: 'menAtArms', label: 'Men-at-Arms', w: 'maaWeaponRank', a: 'maaArmourRank' },
+  { key: 'heavyCavalry', label: 'Heavy Cavalry', w: 'hcWeaponRank', a: 'hcArmourRank', tr: 'hcTraining' },
+  { key: 'lightCavalry', label: 'Light Cavalry', w: 'lcWeaponRank', a: 'lcArmourRank', tr: 'lcTraining' },
+  { key: 'heavyInfantry', label: 'Heavy Infantry', w: 'hiWeaponRank', a: 'hiArmourRank', tr: 'hiTraining' },
+  { key: 'lightInfantry', label: 'Light Infantry', w: 'liWeaponRank', a: 'liArmourRank', tr: 'liTraining' },
+  { key: 'archers', label: 'Archers', w: 'archerWeaponRank', a: 'archerArmourRank', tr: 'archerTraining' },
+  { key: 'menAtArms', label: 'Men-at-Arms', w: 'maaWeaponRank', a: 'maaArmourRank', tr: 'maaTraining' },
 ];
+
+function materialName(rank: number): string {
+  if (rank >= 100) return 'mithril';
+  if (rank >= 60) return 'steel';
+  if (rank >= 40) return 'bronze';
+  if (rank >= 20) return 'leather';
+  return 'none';
+}
+
+function armyTroopTotal(army: any): number {
+  return TROOP_ROWS.reduce((s, t) => s + (army[t.key] || 0), 0);
+}
+
+function ArmyCharChip({ c, isCommander }: { c: any; isCommander: boolean }) {
+  return (
+    <Tip
+      trigger={
+        <span className={`inline-block px-2 py-1 rounded text-xs border ${isCommander ? 'bg-gray-700 border-mepbm-gold text-mepbm-gold' : 'bg-gray-700 border-gray-600 text-gray-200'}`}>
+          {c.name}{isCommander ? ' ★' : ''}
+        </span>
+      }
+    >
+      <span className="block text-white font-bold text-sm">{c.name}{isCommander ? ' (commander)' : ''}</span>
+      <span className="block text-xs text-gray-400 mt-0.5">{c.type ?? ''}</span>
+      <span className="block text-sm text-gray-200 mt-1">
+        Command {c.commandSkill ?? 0} · Agent {c.agentSkill ?? 0} · Emissary {c.emissarySkill ?? 0} · Mage {c.mageSkill ?? 0}
+      </span>
+      <span className="block text-sm text-gray-200">Health {c.health ?? '?'}{c.maxHealth ? ` / ${c.maxHealth}` : ''}</span>
+    </Tip>
+  );
+}
 
 function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName }: {
   armies: any[]; characters: any[]; populationCentres: any[]; hexTiles: any[]; nationName?: string;
@@ -1166,45 +1197,98 @@ function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName
   for (const c of characters) charById.set(c.id, c);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {armies.map((army: any) => {
         const commander = army.commanderId ? charById.get(army.commanderId) : null;
         const pcLine = pcSentence(populationCentres, army.locationHex, nationName);
+        const members = characters.filter((c: any) => c.armyId === army.id);
+        const total = armyTroopTotal(army);
+        const eats = Math.floor(total / 100);
+        const food = army.food ?? 0;
+        const turns = eats > 0 ? Math.floor(food / eats) : null;
+        const rows = TROOP_ROWS.filter((t) => (army[t.key] || 0) > 0);
         return (
-          <div key={army.id} className="bg-gray-800 rounded-lg p-5 border border-gray-700">
-            <p className="text-sm text-gray-200">
-              <span className="font-bold text-white">Army Commander: {commander ? commander.name : 'None'}</span>
-              <span className="text-gray-400"> — Location: @ {army.locationHex} in {terrainAt(hexTiles, army.locationHex)}</span>
-            </p>
-            <p className="text-sm text-gray-300 mt-1">Morale: {army.morale ?? 0}</p>
-            <table className="w-full mt-2 text-sm">
-              <thead>
-                <tr className="text-left text-xs text-gray-500 uppercase">
-                  <th className="py-1 pr-3">Troops</th>
-                  <th className="py-1 pr-3">Training</th>
-                  <th className="py-1 pr-3">Weapon</th>
-                  <th className="py-1 pr-3">Armor</th>
-                  <th className="py-1 pr-3 text-right"># Troops</th>
-                  <th className="py-1">Troop Type</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700">
-                {TROOP_ROWS.filter((t) => (army[t.key] || 0) > 0).map((t) => (
-                  <tr key={t.key} className="text-gray-200">
-                    <td className="py-1 pr-3">{t.label}</td>
-                    <td className="py-1 pr-3 font-mono">{army.training ?? 0}</td>
-                    <td className="py-1 pr-3 font-mono">{army[t.w] ?? 0}</td>
-                    <td className="py-1 pr-3 font-mono">{army[t.a] ?? 0}</td>
-                    <td className="py-1 pr-3 text-right font-mono">{army[t.key]}</td>
-                    <td className="py-1 text-gray-400">{t.label}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="text-sm text-gray-300 mt-2">
-              Food: {army.food ?? 0} · War Machines: {army.warMachines ?? 0}
-            </p>
-            {pcLine && <p className="text-sm text-gray-400 mt-1">{pcLine}</p>}
+          <div key={army.id} className="bg-gray-800 rounded-lg p-5 border border-gray-700 space-y-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-xl font-bold text-white">{army.name}</h3>
+              <span className="text-xs px-2 py-1 rounded bg-gray-900 border border-gray-600 text-gray-300">
+                @ {army.locationHex} · {terrainAt(hexTiles, army.locationHex)}
+              </span>
+              <span className="ml-auto text-xs text-gray-400">{total} troops</span>
+            </div>
+
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Command & Stores</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <StatBox label="Morale" value={army.morale ?? 0} />
+                <StatBox label="Training (avg)" value={army.training ?? 0} />
+                <StatBox label="Food" value={`${food} · -${eats}/turn${turns != null ? ` (${turns} turns)` : ''}`} />
+                <StatBox label="War Machines" value={army.warMachines ?? 0} />
+              </div>
+            </div>
+
+            {rows.length > 0 && (
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Troops by type, weapon & armour</div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-gray-500 uppercase">
+                      <th className="py-1 pr-3">Type</th>
+                      <th className="py-1 pr-3 text-right">#</th>
+                      <th className="py-1 pr-3">Weapon</th>
+                      <th className="py-1 pr-3">Armour</th>
+                      <th className="py-1 pr-3">Training</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {rows.map((t) => {
+                      const count = army[t.key] || 0;
+                      const w = army[t.w] ?? 0;
+                      const a = army[t.a] ?? 0;
+                      const tr = army[t.tr] ?? army.training ?? 0;
+                      const share = total > 0 && eats > 0 ? Math.max(1, Math.round((count / total) * eats)) : 0;
+                      return (
+                        <tr key={t.key} className="text-gray-200">
+                          <td className="py-1 pr-3">
+                            <Tip
+                              trigger={<span className="cursor-help">{t.label}</span>}
+                            >
+                              <span className="block text-white font-bold text-sm">{t.label} × {count}</span>
+                              <span className="block text-sm text-gray-200 mt-1">Weapons: {materialName(w)} ({w})</span>
+                              <span className="block text-sm text-gray-200">Armour: {materialName(a)} ({a})</span>
+                              <span className="block text-sm text-gray-200">Training: {tr}</span>
+                              <span className="block text-sm text-gray-200">Eats ~{share} food/turn</span>
+                            </Tip>
+                          </td>
+                          <td className="py-1 pr-3 text-right font-mono">{count}</td>
+                          <td className="py-1 pr-3">{materialName(w)} <span className="text-gray-500 font-mono">({w})</span></td>
+                          <td className="py-1 pr-3">{materialName(a)} <span className="text-gray-500 font-mono">({a})</span></td>
+                          <td className="py-1 pr-3 font-mono">{tr}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">
+                Characters{members.length > 0 ? ` (${members.length})` : ''}
+              </div>
+              {members.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {members.map((c: any) => (
+                    <ArmyCharChip key={c.id} c={c} isCommander={c.id === army.commanderId} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">—</p>
+              )}
+              {!commander && <p className="text-xs text-gray-500 mt-1">No commander assigned.</p>}
+            </div>
+
+            {pcLine && <p className="text-sm text-gray-400 border-t border-gray-700 pt-3">{pcLine}</p>}
           </div>
         );
       })}

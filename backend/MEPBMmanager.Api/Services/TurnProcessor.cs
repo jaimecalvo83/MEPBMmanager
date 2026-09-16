@@ -761,6 +761,12 @@ public class TurnProcessor
         }
         SetTroopWeaponRank(order.Army, troopType, Math.Max(TroopWeaponRank(order.Army, troopType), weaponRank));
         SetTroopArmourRank(order.Army, troopType, Math.Max(TroopArmourRank(order.Army, troopType), armourRank));
+        // Training medio de la agrupación (tipo): los nuevos promedian con los que ya hay.
+        var typeCount = TroopCount(order.Army, troopType);
+        var typeBase = Math.Max(TroopTraining(order.Army, troopType), 10);
+        SetTroopTraining(order.Army, troopType, typeCount == 0
+            ? recruitTraining
+            : (typeCount * typeBase + amount * recruitTraining) / (typeCount + amount));
         var newTotal = existing + amount;
         order.Army.Training = existing == 0
             ? recruitTraining
@@ -1448,6 +1454,30 @@ public class TurnProcessor
         "MenAtArms" => army.MenAtArms,
         _ => 0
     };
+
+    private static int TroopTraining(Army army, string type) => type switch
+    {
+        "HeavyCavalry" => army.HCTraining,
+        "LightCavalry" => army.LCTraining,
+        "HeavyInfantry" => army.HITraining,
+        "LightInfantry" => army.LITraining,
+        "Archers" => army.ArcherTraining,
+        "MenAtArms" => army.MAATraining,
+        _ => 10
+    };
+
+    private static void SetTroopTraining(Army army, string type, int value)
+    {
+        switch (type)
+        {
+            case "HeavyCavalry": army.HCTraining = value; break;
+            case "LightCavalry": army.LCTraining = value; break;
+            case "HeavyInfantry": army.HITraining = value; break;
+            case "LightInfantry": army.LITraining = value; break;
+            case "Archers": army.ArcherTraining = value; break;
+            case "MenAtArms": army.MAATraining = value; break;
+        }
+    }
 
     private static int TroopWeaponRank(Army army, string type) => type switch
     {
@@ -2635,6 +2665,13 @@ public class TurnProcessor
             MAAWeaponRank = order.Army.MAAWeaponRank,
             MAAArmourRank = order.Army.MAAArmourRank,
             Morale = order.Army.Morale,
+            Training = order.Army.Training,
+            HCTraining = order.Army.HCTraining,
+            LCTraining = order.Army.LCTraining,
+            HITraining = order.Army.HITraining,
+            LITraining = order.Army.LITraining,
+            ArcherTraining = order.Army.ArcherTraining,
+            MAATraining = order.Army.MAATraining,
             CommanderId = newBoss.Id
         };
 
@@ -4133,6 +4170,7 @@ public class TurnProcessor
         SetTroopCount(army, troopType, troops);
         SetTroopWeaponRank(army, troopType, wRank);
         SetTroopArmourRank(army, troopType, aRank);
+        SetTroopTraining(army, troopType, 10);
         _db.Armies.Add(army);
         order.Status = "resolved"; order.Result = $"Hired army: {army.Name} ({troops} {troopType}) for {cost} gold";
         return MakeResult(order, order.Result);

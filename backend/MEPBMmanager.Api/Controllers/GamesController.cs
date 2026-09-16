@@ -1401,6 +1401,12 @@ public class GamesController : ControllerBase
                 a.MAAArmourRank,
                 a.Morale,
                 a.Training,
+                a.HCTraining,
+                a.LCTraining,
+                a.HITraining,
+                a.LITraining,
+                a.ArcherTraining,
+                a.MAATraining,
                 a.Food,
                 a.WarMachines,
                 a.IsOnManoeuvres

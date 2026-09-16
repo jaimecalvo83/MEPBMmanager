@@ -33,6 +33,12 @@ public class Army
     // Stats
     public int Morale { get; set; } = 30;
     public int Training { get; set; } = 10;
+    public int HCTraining { get; set; } = 10;
+    public int LCTraining { get; set; } = 10;
+    public int HITraining { get; set; } = 10;
+    public int LITraining { get; set; } = 10;
+    public int ArcherTraining { get; set; } = 10;
+    public int MAATraining { get; set; } = 10;
     public int Food { get; set; } = 0;
     public int WarMachines { get; set; } = 0;
     public bool IsOnManoeuvres { get; set; } = false;
