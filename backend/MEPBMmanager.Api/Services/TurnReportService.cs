@@ -13,8 +13,9 @@ public class TurnReportService
         _db = db;
     }
 
-    public async Task<object?> GetReportAsync(string gameId, string turnId, string? nationId = null)
+    public async Task<object?> GetReportAsync(string gameId, string turnId, string? nationId = null, string lang = "en")
     {
+        string L(string en, string es) => lang == "es" ? es : en;
         var turn = await _db.Turns
             .Include(t => t.Game).ThenInclude(g => g.Nations)
                 .ThenInclude(n => n.Armies)
@@ -55,6 +56,14 @@ public class TurnReportService
 
         var sections = new List<object>();
 
+        object OrderEntry(Dictionary<string, JsonElement> r) => new
+        {
+            character = r.TryGetValue("character", out var c) ? c.GetString() : "?",
+            code = r.TryGetValue("code", out var cd) && cd.ValueKind == JsonValueKind.Number ? cd.GetInt32() : 0,
+            message = r.TryGetValue("message", out var m) ? m.GetString() : "",
+            success = r.TryGetValue("success", out var s) && s.ValueKind == JsonValueKind.True
+        };
+
         // ── RESUMEN DE NACIÓN (solo para jugadores con nación asignada) ──
         if (nationId != null)
         {
@@ -63,14 +72,15 @@ public class TurnReportService
             {
                 sections.Add(new
                 {
-                    title = "Nation Summary",
+                    key = "summary",
+                    title = L("Nation Summary", "Resumen de la nación"),
                     entries = new object[]
                     {
-                        new { category = "Resources", detail = $"Gold: {nation.Gold}, Food: {nation.Food}, Timber: {nation.Timber}, Leather: {nation.Leather}, Bronze: {nation.Bronze}, Steel: {nation.Steel}, Mithril: {nation.Mithril}, Mounts: {nation.Mounts}" },
-                        new { category = "Tax Rate", detail = $"{nation.TaxRate}%" },
-                        new { category = "Armies", detail = FormatArmies(nation.Armies) },
-                        new { category = "Population Centres", detail = string.Join("; ", nation.PopulationCentres.Select(pc => pc.Name + " (" + pc.Size + ")")) },
-                        new { category = "Characters", detail = string.Join("; ", nation.Characters.Select(c => c.Name + " (" + c.Type + ") HP=" + c.Health)) }
+                        new { category = "resources", detail = $"{L("Gold", "Oro")}: {nation.Gold}, {L("Food", "Comida")}: {nation.Food}, {L("Timber", "Madera")}: {nation.Timber}, {L("Leather", "Cuero")}: {nation.Leather}, {L("Bronze", "Bronce")}: {nation.Bronze}, {L("Steel", "Acero")}: {nation.Steel}, {L("Mithril", "Mitril")}: {nation.Mithril}, {L("Mounts", "Monturas")}: {nation.Mounts}" },
+                        new { category = "tax", detail = $"{nation.TaxRate}%" },
+                        new { category = "armies", detail = FormatArmies(nation.Armies) },
+                        new { category = "pcs", detail = string.Join("; ", nation.PopulationCentres.Select(pc => pc.Name + " (" + pc.Size + ")")) },
+                        new { category = "chars", detail = string.Join("; ", nation.Characters.Select(c => c.Name + " (" + c.Type + ") HP=" + c.Health)) }
                     }
                 });
             }
@@ -82,12 +92,15 @@ public class TurnReportService
             {
                 sections.Add(new
                 {
-                    title = $"Nation: {nation.Name} ({nation.Allegiance})",
+                    key = "nation",
+                    title = L("Nation: ", "Nación: ") + nation.Name,
+                    nation = nation.Name,
+                    allegiance = nation.Allegiance,
                     entries = new object[]
                     {
-                        new { category = "Resources", detail = $"Gold: {nation.Gold}, Food: {nation.Food}, Timber: {nation.Timber}, Steel: {nation.Steel}, Mounts: {nation.Mounts}" },
-                        new { category = "Armies", detail = FormatArmies(nation.Armies) },
-                        new { category = "Population Centres", detail = string.Join("; ", nation.PopulationCentres.Select(pc => pc.Name + " (" + pc.Size + ")")) }
+                        new { category = "resources", detail = $"{L("Gold", "Oro")}: {nation.Gold}, {L("Food", "Comida")}: {nation.Food}, {L("Timber", "Madera")}: {nation.Timber}, {L("Steel", "Acero")}: {nation.Steel}, {L("Mounts", "Monturas")}: {nation.Mounts}" },
+                        new { category = "armies", detail = FormatArmies(nation.Armies) },
+                        new { category = "pcs", detail = string.Join("; ", nation.PopulationCentres.Select(pc => pc.Name + " (" + pc.Size + ")")) }
                     }
                 });
             }
@@ -105,7 +118,7 @@ public class TurnReportService
                 tax = r.TryGetValue("tax", out var tx) ? tx.GetInt32() : 0,
                 message = r.TryGetValue("message", out var m) ? m.GetString() : ""
             }).ToList();
-            sections.Add(new { title = "Economy", entries = economyEntries });
+            sections.Add(new { key = "economy", title = L("Economy", "Economía"), entries = economyEntries });
         }
 
         // ── HAMBRE ──
@@ -118,7 +131,7 @@ public class TurnReportService
                 army = r.TryGetValue("army", out var a) ? a.GetString() : "?",
                 message = r.TryGetValue("message", out var m) ? m.GetString() : ""
             }).ToList();
-            sections.Add(new { title = "Famine", entries = hungerEntries });
+            sections.Add(new { key = "famine", title = L("Famine", "Hambruna"), entries = hungerEntries });
         }
 
         // ── ÓRDENES POR TIPO ──
@@ -128,52 +141,32 @@ public class TurnReportService
         var movementOrders = orderResults.Where(r => r.TryGetValue("code", out var c) && c.GetInt32() >= 810 && c.GetInt32() <= 870).ToList();
         if (movementOrders.Any())
         {
-            var entries = movementOrders.Select(r => new
-            {
-                character = r.TryGetValue("character", out var c) ? c.GetString() : "?",
-                message = r.TryGetValue("message", out var m) ? m.GetString() : "",
-                success = r.TryGetValue("success", out var s) && s.GetBoolean()
-            }).ToList();
-            sections.Add(new { title = "Movement", entries });
+            var entries = movementOrders.Select(r => OrderEntry(r)).ToList();
+            sections.Add(new { key = "movement", title = L("Movement", "Movimiento"), entries });
         }
 
         // Combate (codes 230-260)
         var combatOrders = orderResults.Where(r => r.TryGetValue("code", out var c) && c.GetInt32() >= 230 && c.GetInt32() <= 260).ToList();
         if (combatOrders.Any())
         {
-            var entries = combatOrders.Select(r => new
-            {
-                character = r.TryGetValue("character", out var c) ? c.GetString() : "?",
-                message = r.TryGetValue("message", out var m) ? m.GetString() : "",
-                success = r.TryGetValue("success", out var s) && s.GetBoolean()
-            }).ToList();
-            sections.Add(new { title = "Combat", entries });
+            var entries = combatOrders.Select(r => OrderEntry(r)).ToList();
+            sections.Add(new { key = "combat", title = L("Combat", "Combate"), entries });
         }
 
         // Reclutamiento (codes 400-448)
         var recruitOrders = orderResults.Where(r => r.TryGetValue("code", out var c) && c.GetInt32() >= 400 && c.GetInt32() <= 448).ToList();
         if (recruitOrders.Any())
         {
-            var entries = recruitOrders.Select(r => new
-            {
-                character = r.TryGetValue("character", out var c) ? c.GetString() : "?",
-                message = r.TryGetValue("message", out var m) ? m.GetString() : "",
-                success = r.TryGetValue("success", out var s) && s.GetBoolean()
-            }).ToList();
-            sections.Add(new { title = "Recruitment", entries });
+            var entries = recruitOrders.Select(r => OrderEntry(r)).ToList();
+            sections.Add(new { key = "recruitment", title = L("Recruitment", "Reclutamiento"), entries });
         }
 
         // Economía/mercado (codes 300-375)
         var econOrders = orderResults.Where(r => r.TryGetValue("code", out var c) && c.GetInt32() >= 300 && c.GetInt32() <= 375).ToList();
         if (econOrders.Any())
         {
-            var entries = econOrders.Select(r => new
-            {
-                character = r.TryGetValue("character", out var c) ? c.GetString() : "?",
-                message = r.TryGetValue("message", out var m) ? m.GetString() : "",
-                success = r.TryGetValue("success", out var s) && s.GetBoolean()
-            }).ToList();
-            sections.Add(new { title = "Economic Orders", entries });
+            var entries = econOrders.Select(r => OrderEntry(r)).ToList();
+            sections.Add(new { key = "econ", title = L("Economic Orders", "Órdenes económicas"), entries });
         }
 
         // Magia (codes 120, 225, 330, 700-710, 825, 940)
@@ -181,13 +174,8 @@ public class TurnReportService
         var magicOrders = orderResults.Where(r => r.TryGetValue("code", out var c) && magicCodes.Contains(c.GetInt32())).ToList();
         if (magicOrders.Any())
         {
-            var entries = magicOrders.Select(r => new
-            {
-                character = r.TryGetValue("character", out var c) ? c.GetString() : "?",
-                message = r.TryGetValue("message", out var m) ? m.GetString() : "",
-                success = r.TryGetValue("success", out var s) && s.GetBoolean()
-            }).ToList();
-            sections.Add(new { title = "Magic", entries });
+            var entries = magicOrders.Select(r => OrderEntry(r)).ToList();
+            sections.Add(new { key = "magic", title = L("Magic", "Magia"), entries });
         }
 
         // Otras órdenes
@@ -200,25 +188,16 @@ public class TurnReportService
         var otherOrders = orderResults.Where(r => r.TryGetValue("code", out var c) && !handledCodes.Contains(c.GetInt32())).ToList();
         if (otherOrders.Any())
         {
-            var entries = otherOrders.Select(r => new
-            {
-                character = r.TryGetValue("character", out var c) ? c.GetString() : "?",
-                message = r.TryGetValue("message", out var m) ? m.GetString() : "",
-                success = r.TryGetValue("success", out var s) && s.GetBoolean()
-            }).ToList();
-            sections.Add(new { title = "Other Orders", entries });
+            var entries = otherOrders.Select(r => OrderEntry(r)).ToList();
+            sections.Add(new { key = "other", title = L("Other Orders", "Otras órdenes"), entries });
         }
 
         // Hold orders (auto-generated)
         var holdOrders = orderResults.Where(r => r.TryGetValue("code", out var c) && c.GetInt32() == 100).ToList();
         if (holdOrders.Any())
         {
-            var entries = holdOrders.Select(r => new
-            {
-                character = r.TryGetValue("character", out var c) ? c.GetString() : "?",
-                message = r.TryGetValue("message", out var m) ? m.GetString() : ""
-            }).ToList();
-            sections.Add(new { title = "Auto-Hold (Inactive)", entries });
+            var entries = holdOrders.Select(r => OrderEntry(r)).ToList();
+            sections.Add(new { key = "hold", title = L("Auto-Hold (Inactive)", "Espera automática (inactivos)"), entries });
         }
 
         return new

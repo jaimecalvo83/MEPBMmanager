@@ -171,6 +171,7 @@ const en = {
   'rel.thSide': 'Side',
   'rel.thRelation': 'Relation',
   'rel.thChange': 'Change to',
+  'rel.viaOrders': 'Change them with orders 180/185.',
   'rel.saving': 'Saving…',
   // reports
   'rep.noTurns': 'No turns yet. Reports appear after the first turn is processed.',
@@ -178,6 +179,27 @@ const en = {
   'rep.loading': 'Loading report...',
   'rep.loadFail': 'Failed to load the turn report.',
   'rep.noResults': 'No results recorded for this turn yet.',
+  'rep.secSummary': 'Nation Summary',
+  'rep.secNation': 'Nation',
+  'rep.secEconomy': 'Economy',
+  'rep.secFamine': 'Famine',
+  'rep.secMovement': 'Movement',
+  'rep.secCombat': 'Combat',
+  'rep.secRecruitment': 'Recruitment',
+  'rep.secEcon': 'Economic Orders',
+  'rep.secMagic': 'Magic',
+  'rep.secOther': 'Other Orders',
+  'rep.secHold': 'Auto-Hold (Inactive)',
+  'rep.catResources': 'Resources',
+  'rep.catTax': 'Tax Rate',
+  'rep.catArmies': 'Armies',
+  'rep.catPcs': 'Population Centres',
+  'rep.catChars': 'Characters',
+  'rep.thNation': 'Nation',
+  'rep.thGold': 'Gold',
+  'rep.thFood': 'Food',
+  'rep.thTax': 'Tax',
+  'rep.thMessage': 'Detail',
   // standings
   'stand.none': 'No nations in this game.',
   'stand.intro': 'Turn victory points per nation (recalculated each turn from areas of play, not cumulative).',
@@ -576,12 +598,34 @@ const es: Record<DictKey, string> = {
   'rel.thSide': 'Bando',
   'rel.thRelation': 'Relación',
   'rel.thChange': 'Cambiar a',
+  'rel.viaOrders': 'Cámbialas con las órdenes 180/185.',
   'rel.saving': 'Guardando…',
   'rep.noTurns': 'Sin turnos. Los informes salen tras procesar el primero.',
   'rep.turnBtn': 'Turno {n} · {s} ({st})',
   'rep.loading': 'Cargando informe...',
   'rep.loadFail': 'No se pudo cargar el informe.',
   'rep.noResults': 'Sin resultados para este turno.',
+  'rep.secSummary': 'Resumen de la nación',
+  'rep.secNation': 'Nación',
+  'rep.secEconomy': 'Economía',
+  'rep.secFamine': 'Hambruna',
+  'rep.secMovement': 'Movimiento',
+  'rep.secCombat': 'Combate',
+  'rep.secRecruitment': 'Reclutamiento',
+  'rep.secEcon': 'Órdenes económicas',
+  'rep.secMagic': 'Magia',
+  'rep.secOther': 'Otras órdenes',
+  'rep.secHold': 'Espera automática (inactivos)',
+  'rep.catResources': 'Recursos',
+  'rep.catTax': 'Tasa',
+  'rep.catArmies': 'Ejércitos',
+  'rep.catPcs': 'Centros de población',
+  'rep.catChars': 'Personajes',
+  'rep.thNation': 'Nación',
+  'rep.thGold': 'Oro',
+  'rep.thFood': 'Comida',
+  'rep.thTax': 'Tasa',
+  'rep.thMessage': 'Detalle',
   'stand.none': 'Sin naciones en la partida.',
   'stand.intro': 'Puntos de victoria por nación (recalculados cada turno, no acumulativos).',
   'stand.elimNote': 'Las eliminadas salen pero no pueden ganar.',
@@ -1000,6 +1044,24 @@ export function nationName(name: string | undefined, lang: string): string {
   if (!name) return '';
   if (lang !== 'es') return name;
   return NATION_ES[name.toLowerCase()] ?? name;
+}
+
+const ARTIFACT_TYPE_ES: Record<string, string> = {
+  sword: 'Espada', weapon: 'Arma', bow: 'Arco', mace: 'Maza', scimitar: 'Cimitarra',
+  hammer: 'Martillo', lance: 'Lanza', club: 'Garrote', flail: 'Mangual', axe: 'Hacha',
+  bola: 'Bola', spear: 'Lanza', boots: 'Botas', mirror: 'Espejo', orb: 'Orbe',
+  sphere: 'Esfera', cloak: 'Capa', robes: 'Túnicas', robe: 'Túnica', ring: 'Anillo',
+  staff: 'Báculo', helm: 'Yelmo', armour: 'Armadura', armor: 'Armadura', shield: 'Escudo',
+  plate: 'Coraza', crown: 'Corona', bracelet: 'Brazalete', bracers: 'Brazales',
+  mantle: 'Manto', collar: 'Collar', rod: 'Vara', belt: 'Cinturón', talisman: 'Talismán',
+  dagger: 'Daga', rapier: 'Estoque', sickle: 'Hoz', sceptre: 'Cetro', book: 'Libro',
+  tablets: 'Tablillas', pectoral: 'Pectoral', gauntlets: 'Guanteletes', amulet: 'Amuleto',
+  blade: 'Hoja', knife: 'Cuchillo', gown: 'Túnica', cap: 'Gorro',
+};
+
+export function artifactType(t: string | undefined, lang: string): string {
+  if (!t || lang !== 'es') return t ?? '';
+  return ARTIFACT_TYPE_ES[t.toLowerCase()] ?? t;
 }
 
 export function roleLabel(role: string | undefined, t: TFunc): string {

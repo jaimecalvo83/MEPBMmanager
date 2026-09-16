@@ -22,6 +22,9 @@ public class SpellDefinition
     public bool IsLost { get; set; } = false;
     public int MinCastingRank { get; set; } = 0;
     public string WikiCollege { get; set; } = string.Empty;
+    public string NameEs { get; set; } = string.Empty;
+    public string CollegeEs { get; set; } = string.Empty;
+    public string CastOrderEs { get; set; } = string.Empty;
     public string Difficulty { get; set; } = string.Empty;
     public string CastOrder { get; set; } = string.Empty;
     public string Prerequisites { get; set; } = string.Empty;
@@ -57,6 +60,9 @@ public static class SpellCatalog
             IsLost = LostIds.Contains(s.Id),
             MinCastingRank = s.MinCastingRank,
             WikiCollege = s.College,
+            NameEs = SpellDefinitionsEs.NamesEs.TryGetValue(s.Id, out var sn) ? sn : s.Name,
+            CollegeEs = SpellDefinitionsEs.CollegesEs.TryGetValue(s.Id, out var sc) ? sc : s.College,
+            CastOrderEs = SpellDefinitionsEs.CastOrdersEs.TryGetValue(s.Id, out var so) ? so : s.CastOrder,
             Difficulty = s.Difficulty,
             CastOrder = s.CastOrder,
             Prerequisites = s.Prerequisites,

@@ -26,6 +26,14 @@ api.interceptors.response.use(
   }
 );
 
+export const orderLang = () => {
+  try {
+    return localStorage.getItem('mepbm-lang') === 'es' ? 'es' : 'en';
+  } catch {
+    return 'en';
+  }
+};
+
 export const authApi = {
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
@@ -53,7 +61,7 @@ export const gamesApi = {
   processTurn: (gameId: string) =>
     api.post(`/games/${gameId}/process-turn`),
   getTurnReport: (gameId: string, turnId: string) =>
-    api.get(`/games/${gameId}/turns/${turnId}/report`),
+    api.get(`/games/${gameId}/turns/${turnId}/report`, { params: { lang: orderLang() } }),
   getState: (gameId: string, nationId?: string) =>
     api.get(`/games/${gameId}/state`, { params: nationId ? { nationId } : undefined }),
   updateNation: (gameId: string, nationId: string) =>
@@ -72,14 +80,6 @@ export const gamesApi = {
     api.post(`/games/${gameId}/players`, { email, isAdmin }),
   removePlayer: (gameId: string, playerId: string) =>
     api.delete(`/games/${gameId}/players/${playerId}`),
-};
-
-const orderLang = () => {
-  try {
-    return localStorage.getItem('mepbm-lang') === 'es' ? 'es' : 'en';
-  } catch {
-    return 'en';
-  }
 };
 
 export const ordersApi = {

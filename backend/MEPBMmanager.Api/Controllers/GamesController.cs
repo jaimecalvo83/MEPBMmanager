@@ -1095,7 +1095,7 @@ public class GamesController : ControllerBase
 
     [HttpGet("{id}/turns/{turnId}/report")]
     [Authorize]
-    public async Task<IActionResult> GetTurnReport(string id, string turnId, [FromServices] TurnReportService reportService)
+    public async Task<IActionResult> GetTurnReport(string id, string turnId, [FromServices] TurnReportService reportService, [FromQuery] string? lang = null)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var game = await _db.Games.Include(g => g.Players).FirstOrDefaultAsync(g => g.Id == id);
@@ -1105,7 +1105,7 @@ public class GamesController : ControllerBase
         var player = game.Players.FirstOrDefault(p => p.UserId == userId);
         var nationId = player?.NationId;
 
-        var report = await reportService.GetReportAsync(id, turnId, nationId);
+        var report = await reportService.GetReportAsync(id, turnId, nationId, lang == "es" ? "es" : "en");
         if (report == null)
             return NotFound(new { error = "Turn not found" });
 
@@ -1360,7 +1360,8 @@ public class GamesController : ControllerBase
                     primaryBenefit = ArtifactCatalog2950.Find(a.Name)?.Primary,
                     secondaryPower = ArtifactCatalog2950.Find(a.Name)?.Secondary,
                     primaryEs = ArtifactCatalog2950Es.FindByName(a.Name)?.Primary,
-                    secondaryEs = ArtifactCatalog2950Es.FindByName(a.Name)?.Secondary }),
+                    secondaryEs = ArtifactCatalog2950Es.FindByName(a.Name)?.Secondary,
+                    nameEs = ArtifactCatalog2950Es.NameEsByName(a.Name) }),
                 spells = c.Spells.Where(s => s.IsKnown).Select(s => new
                 {
                     s.SpellId,
@@ -1369,14 +1370,15 @@ public class GamesController : ControllerBase
                     college = SpellCatalog.Get(s.SpellId)?.Type.ToString(),
                     minRank = SpellCatalog.Get(s.SpellId)?.MinCastingRank,
                     wikiCollege = SpellCatalog.Get(s.SpellId)?.WikiCollege,
+                    nameEs = SpellCatalog.Get(s.SpellId)?.NameEs,
+                    collegeEs = SpellCatalog.Get(s.SpellId)?.CollegeEs,
+                    castOrderEs = SpellCatalog.Get(s.SpellId)?.CastOrderEs,
                     difficulty = SpellCatalog.Get(s.SpellId)?.Difficulty,
                     castOrder = SpellCatalog.Get(s.SpellId)?.CastOrder,
                     prerequisites = SpellCatalog.Get(s.SpellId)?.Prerequisites,
                     requiredInfo = SpellCatalog.Get(s.SpellId)?.RequiredInfo,
                     effect = SpellCatalog.Get(s.SpellId)?.Effect,
-                    collegeEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se0) ? se0.College : null,
                     difficultyEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se1) ? se1.Difficulty : null,
-                    castOrderEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se2) ? se2.CastOrder : null,
                     prerequisitesEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se3) ? se3.Prerequisites : null,
                     requiredInfoEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se4) ? se4.RequiredInfo : null,
                     effectEs = SpellDefinitionsEs.ById.TryGetValue(s.SpellId, out var se5) ? se5.Effect : null

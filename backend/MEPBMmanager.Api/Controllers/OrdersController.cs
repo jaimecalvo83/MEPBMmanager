@@ -559,6 +559,10 @@ public class OrdersController : ControllerBase
     };
     private static string NationDisplayName(string? lang, string name) =>
         lang == "es" && NationEs.TryGetValue(name ?? "", out var es) ? es : name;
+    private static string SpellDisplayName(string? lang, int spellId, string fallback) =>
+        lang == "es" && SpellDefinitionsEs.NamesEs.TryGetValue(spellId, out var n) ? n : fallback;
+    private static string ArtifactDisplayName(string? lang, Artifact a) =>
+        lang == "es" ? (ArtifactCatalog2950Es.NameEsByName(a.Name) ?? a.Name) : a.Name;
     private static string CharTypeName(string? lang, string? t) => (t ?? "").ToLower() switch
     {
         "commander" => L(lang, "commander", "comandante"),
@@ -578,16 +582,16 @@ public class OrdersController : ControllerBase
     private List<OrderFieldSpecDto> RequiresFor(int code, EstimateCtx ctx)
     {
         var ch = ctx.Ch;
+        var lng = ctx.Lang;
         List<OrderFieldOptionDto> SpellOpts(SpellType t) => ch.Spells
             .Where(s => s.IsKnown && !s.IsLost && SpellCatalog.Get(s.SpellId)?.Type == t)
             .Select(s => new OrderFieldOptionDto(s.SpellId.ToString(),
-                $"#{s.SpellId} {SpellCatalog.Get(s.SpellId)?.Name ?? "?"}"))
+                $"#{s.SpellId} {SpellDisplayName(lng, s.SpellId, SpellCatalog.Get(s.SpellId)?.Name ?? "?")}"))
             .ToList();
         List<OrderFieldOptionDto> ArmyOpts(string? atHex = null) => ctx.Nation.Armies
             .Where(a => atHex == null || a.LocationHex == atHex)
             .Select(a => new OrderFieldOptionDto(a.Id, $"{a.Name} @ {a.LocationHex}"))
             .ToList();
-        var lng = ctx.Lang;
         List<OrderFieldOptionDto> CharOpts(IEnumerable<Character> chars) => chars
             .Select(c => new OrderFieldOptionDto(c.Id, $"{c.Name} ({CharTypeName(lng, c.Type)} @ {c.LocationHex})"))
             .ToList();
@@ -597,9 +601,9 @@ public class OrdersController : ControllerBase
         var allNations = ctx.Game.Nations
             .Select(n => new OrderFieldOptionDto(n.Id, $"{NationDisplayName(lng, n.Name)} ({AllegianceName(lng, n.Allegiance)})")).ToList();
         var heldArts = ch.Artifacts.Where(a => a.HeldByCharacterId == ch.Id)
-            .Select(a => new OrderFieldOptionDto(a.Id, a.Name)).ToList();
+            .Select(a => new OrderFieldOptionDto(a.Id, ArtifactDisplayName(lng, a))).ToList();
         var catalogSpells = SpellCatalog.All
-            .Select(s => new OrderFieldOptionDto(s.Id.ToString(), $"#{s.Id} {s.Name}{(s.IsLost ? L(lng, " [lost]", " [perdido]") : "")}")).ToList();
+            .Select(s => new OrderFieldOptionDto(s.Id.ToString(), $"#{s.Id} {SpellDisplayName(lng, s.Id, s.Name)}{(s.IsLost ? L(lng, " [lost]", " [perdido]") : "")}")).ToList();
         // 940: el formulario se criba según el hechizo elegido.
         List<OrderFieldSpecDto> LoreRequires()
         {
@@ -620,7 +624,7 @@ public class OrdersController : ControllerBase
             else if (LoreArtifactSpells.Contains(sid))
                 fields.Add(Sel("artifactId", L(lng, "Artifact", "Artefacto"), _db.Artifacts.ToList()
                     .Select(a => new OrderFieldOptionDto(a.Id, a.HeldByCharacterId != null
-                        ? $"{a.Name} {L(lng, "(held)", "(en mano)")}" : $"{a.Name} @ {a.LocationHex ?? "?"}")).ToList()));
+                        ? $"{ArtifactDisplayName(lng, a)} {L(lng, "(held)", "(en mano)")}" : $"{ArtifactDisplayName(lng, a)} @ {a.LocationHex ?? "?"}")).ToList()));
             else
                 fields.Add(Hx("hex", L(lng, "Hex (empty = here)", "Hex (vacío = aquí)"), req: false));
             return fields;
@@ -640,7 +644,7 @@ public class OrdersController : ControllerBase
             705 => new() { Sel("spellId", L(lng, "Spell (empty = random research)", "Hechizo (vacío = aleatorio)"), SpellCatalog.All
                 .Where(s => !ch.Spells.Any(x => x.SpellId == s.Id && x.IsKnown && !x.IsLost)
                     && (!s.IsLost || NationAbilities.CanLearnLostSpell(ctx.Nation.Name, s.Id)))
-                .Select(s => new OrderFieldOptionDto(s.Id.ToString(), $"#{s.Id} {s.Name}{(s.IsLost ? L(lng, " [lost]", " [perdido]") : "")}")).ToList(), req: false) },
+                .Select(s => new OrderFieldOptionDto(s.Id.ToString(), $"#{s.Id} {SpellDisplayName(lng, s.Id, s.Name)}{(s.IsLost ? L(lng, " [lost]", " [perdido]") : "")}")).ToList(), req: false) },
             230 or 235 => new() { Sel("tactic", L(lng, "Tactic", "Táctica"), TacticOptions, req: false) },
             270 or 340 or 345 or 347 or 440 or 452 or 456
                 => new() { Num("amount", L(lng, "Amount", "Cantidad"), min: 1) },
@@ -677,18 +681,18 @@ public class OrdersController : ControllerBase
             610 or 625 or 630 or 635 or 640 or 645 or 650 or 655 or 363 => new()
                 { Sel("targetId", L(lng, "Target", "Objetivo"), CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => !c.IsDead))) },
             685 => new()
-                { Sel("artifactId", L(lng, "Artifact", "Artefacto"), _db.Artifacts.Where(a => (a.HeldByCharacterId != null && a.HeldByCharacterId != ch.Id) || (a.HeldByCharacterId == null && a.LocationHex == ctx.EffLoc)).ToList().Select(a => new OrderFieldOptionDto(a.Id, a.HeldByCharacterId == null ? $"{a.Name} @ {(a.LocationHex ?? "?")}" : a.Name)).ToList()) },
+                { Sel("artifactId", L(lng, "Artifact", "Artefacto"), _db.Artifacts.Where(a => (a.HeldByCharacterId != null && a.HeldByCharacterId != ch.Id) || (a.HeldByCharacterId == null && a.LocationHex == ctx.EffLoc)).ToList().Select(a => new OrderFieldOptionDto(a.Id, a.HeldByCharacterId == null ? $"{ArtifactDisplayName(lng, a)} @ {(a.LocationHex ?? "?")}" : ArtifactDisplayName(lng, a))).ToList()) },
             505 => new() { Sel("targetId", L(lng, "Target character", "Personaje objetivo"), CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => c.NationId != ctx.Nation.Id && !c.IsDead))), Num("amount", L(lng, "Bribe gold (min 500)", "Soborno en oro (mín 500)"), req: false, min: 500) },
             552 or 555 => new() { Txt("name", L(lng, "Camp name (empty = nation pool)", "Nombre campamento (vacío = reserva)"), req: false) },
             560 or 565 or 580 or 585 => new() { Hx("hex", L(lng, "Hex (empty = current location)", "Hex (vacío = actual)"), req: false) },
             360 => new() { Multi("artifactId", L(lng, "Artifacts", "Artefactos"), heldArts), Sel("targetId", L(lng, "To character (same hex)", "A personaje (mismo hex)"), CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => !c.IsDead && !c.IsKidnapped))) },
             792 or 796 => new() { Multi("artifactId", L(lng, "Artifacts (1-6)", "Artefactos (1-6)"), heldArts) },
-            700 => new() { Multi("spellId", L(lng, "Spells to forget (1-6)", "Hechizos a olvidar (1-6)"), ch.Spells.Where(s => s.IsKnown && !s.IsLost).Select(s => new OrderFieldOptionDto(s.SpellId.ToString(), $"#{s.SpellId} {SpellCatalog.Get(s.SpellId)?.Name ?? "?"}")).ToList()) },
+            700 => new() { Multi("spellId", L(lng, "Spells to forget (1-6)", "Hechizos a olvidar (1-6)"), ch.Spells.Where(s => s.IsKnown && !s.IsLost).Select(s => new OrderFieldOptionDto(s.SpellId.ToString(), $"#{s.SpellId} {SpellDisplayName(lng, s.SpellId, SpellCatalog.Get(s.SpellId)?.Name ?? "?")}")).ToList()) },
             798 => new() { Num("amount", L(lng, "Transports to pick up", "Transportes a recoger"), min: 1) },
             205 or 945 => new() { Sel("artifactId", L(lng, "Artifact", "Artefacto"), heldArts) },
             805 => new() { Sel("artifactId", L(lng, "Movement artifact", "Artefacto de movimiento"), heldArts), Hx("destination", L(lng, "Destination hex (empty = stay)", "Hex destino (vacío = quedarse)"), req: false) },
             935 => new() { Sel("artifactId", L(lng, "Artifact", "Artefacto"), heldArts), Hx("hex", L(lng, "Hex to scry (empty = here)", "Hex a espiar (vacío = aquí)"), req: false) },
-            900 => new() { Sel("artifactId", L(lng, "Artifact (optional)", "Artefacto (opcional)"), _db.Artifacts.Where(a => a.HeldByCharacterId == null).ToList().Select(a => new OrderFieldOptionDto(a.Id, $"{a.Name} @ {a.LocationHex ?? "?"}")).ToList(), req: false) },
+            900 => new() { Sel("artifactId", L(lng, "Artifact (optional)", "Artefacto (opcional)"), _db.Artifacts.Where(a => a.HeldByCharacterId == null).ToList().Select(a => new OrderFieldOptionDto(a.Id, $"{ArtifactDisplayName(lng, a)} @ {a.LocationHex ?? "?"}")).ToList(), req: false) },
             905 => new() { Sel("commanderId", L(lng, "Force commander", "Comandante de fuerza"), CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => !c.IsDead))), Flag("follow", L(lng, "Follow", "Seguir")), Hx("hex", L(lng, "Hex (empty = force location)", "Hex (vacío = fuerza)"), req: false) },
             940 => LoreRequires(),
             949 => new() { Sel("targetId", L(lng, "Receiving emissary (other nation, same hex)", "Emisario receptor (otra nación, mismo hex)"), CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => c.EmissarySkill > 0 && !c.IsDead))) },

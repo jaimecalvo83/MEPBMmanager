@@ -6,10 +6,11 @@ import { gamesApi } from '../../api/client';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import HexMap from '../Map/HexMap';
 import OrdersPanel from '../Orders/OrdersPanel';
+import { orderName } from '../Orders/OrderInfoTip';
 import MessagesPanel from '../Messages/MessagesPanel';
 import NationPicker from '../NationPicker/NationPicker';
 import { SPELL_DEFINITIONS } from '@MEPBMmanager/shared';
-import { useLang, LanguageSwitcher, sideLabel, nationName as trNation, charTypeLabel, pcSizeLabel, fortLabel, seasonLabel, statusLabel, terrainLabel, alignmentValue, type TFunc } from '../../i18n/lang';
+import { useLang, LanguageSwitcher, sideLabel, nationName as trNation, charTypeLabel, pcSizeLabel, fortLabel, seasonLabel, statusLabel, terrainLabel, alignmentValue, artifactType, type TFunc } from '../../i18n/lang';
 
 interface PlayerInfo {
   id: string;
@@ -717,7 +718,6 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
 
           {activeTab === 'relations' && (
             <RelationsTab
-              gameId={gameState?.game?.id}
               nationId={selectedNationId || nation?.id}
               nationName={nation?.name}
               allNations={gameState?.allNations || []}
@@ -767,30 +767,13 @@ function relationBadge(level: number, t: TFunc) {
   return <span className={`px-2 py-1 rounded text-xs ${color}`}>{label} ({level})</span>;
 }
 
-function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
-  gameId: string;
+function RelationsTab({ nationId, nationName, allNations, relations }: {
   nationId?: string;
   nationName?: string;
   allNations: any[];
   relations: any[];
 }) {
   const { t, lang } = useLang();
-  const queryClient = useQueryClient();
-  const [savingId, setSavingId] = useState<string | null>(null);
-
-  const mutation = useMutation(
-    async ({ targetId, level }: { targetId: string; level: number }) => {
-      setSavingId(targetId);
-      await gamesApi.setRelation(gameId, nationId!, targetId, level);
-    },
-    {
-      onSuccess: () => {
-        setSavingId(null);
-        queryClient.invalidateQueries(['game', gameId]);
-      },
-      onError: () => setSavingId(null),
-    }
-  );
 
   if (!nationId) {
     return <div className="text-gray-400">{t('rel.selectNation')}</div>;
@@ -803,7 +786,8 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
   return (
     <div className="space-y-4">
       <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 text-sm text-gray-300">
-        {t('rel.introA')}<span className="font-bold text-white">{nationName}</span>{t('rel.introB')}
+        {t('rel.introA')}<span className="font-bold text-white">{trNation(nationName, lang)}</span>{t('rel.introB')}
+        {' '}{t('rel.viaOrders')}
       </div>
       <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
         <table className="w-full">
@@ -812,7 +796,6 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('rel.thNation')}</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('rel.thSide')}</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('rel.thRelation')}</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('rel.thChange')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
@@ -828,19 +811,6 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-300">{sideLabel(n.allegiance, t)}</td>
                   <td className="px-4 py-3 text-sm">{relationBadge(level, t)}</td>
-                  <td className="px-4 py-3 text-sm">
-                    <select
-                      className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600"
-                      value={level}
-                      disabled={savingId === n.id}
-                      onChange={(e) => mutation.mutate({ targetId: n.id, level: parseInt(e.target.value, 10) })}
-                    >
-                      {relLevels(t).map((l) => (
-                        <option key={l.value} value={l.value}>{l.label} ({l.value})</option>
-                      ))}
-                    </select>
-                    {savingId === n.id && <span className="ml-2 text-xs text-gray-400">{t('rel.saving')}</span>}
-                  </td>
                 </tr>
               );
             })}
@@ -854,8 +824,57 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
 // ═══════════════════════════════════════════
 // REPORTS TAB (turn results)
 // ═══════════════════════════════════════════
+function sectionTitle(s: any, tr: TFunc, lang: string): string {
+  switch (s.key) {
+    case 'summary': return tr('rep.secSummary');
+    case 'nation': return `${tr('rep.secNation')}: ${trNation(s.nation ?? '', lang)}${s.allegiance ? ` (${sideLabel(s.allegiance, tr)})` : ''}`;
+    case 'economy': return tr('rep.secEconomy');
+    case 'famine': return tr('rep.secFamine');
+    case 'movement': return tr('rep.secMovement');
+    case 'combat': return tr('rep.secCombat');
+    case 'recruitment': return tr('rep.secRecruitment');
+    case 'econ': return tr('rep.secEcon');
+    case 'magic': return tr('rep.secMagic');
+    case 'other': return tr('rep.secOther');
+    case 'hold': return tr('rep.secHold');
+    default: return s.title ?? '';
+  }
+}
+
+function sectionCat(category: string, tr: TFunc): string {
+  switch (category) {
+    case 'resources': return tr('rep.catResources');
+    case 'tax': return tr('rep.catTax');
+    case 'armies': return tr('rep.catArmies');
+    case 'pcs': return tr('rep.catPcs');
+    case 'chars': return tr('rep.catChars');
+    default: return category;
+  }
+}
+
+function ReportOrderEntry({ e, lang }: { e: any; lang: string }) {
+  const ok = e.success === true;
+  const hasResult = e.success === true || e.success === false;
+  return (
+    <div className="bg-gray-900 rounded px-3 py-2 border border-gray-700">
+      <div className="flex items-center gap-2 flex-wrap">
+        {hasResult && (
+          <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${ok ? 'bg-green-700 text-green-100' : 'bg-red-700 text-red-100'}`}>
+            {ok ? '✓' : '✗'}
+          </span>
+        )}
+        <span className="text-sm font-bold text-white">{e.character ?? '?'}</span>
+        {e.code > 0 && (
+          <span className="text-xs text-mepbm-gold">[{e.code}] {orderName(e.code, lang)}</span>
+        )}
+      </div>
+      {e.message ? <p className="text-sm text-gray-300 mt-1">{e.message}</p> : null}
+    </div>
+  );
+}
+
 function ReportsTab({ gameId, turns }: { gameId: string; turns: any[] }) {
-  const { t: tr } = useLang();
+  const { t: tr, lang } = useLang();
   const [selectedTurnId, setSelectedTurnId] = useState<string | null>(turns[0]?.id ?? null);
   const activeTurnId = turns.some((t: any) => t.id === selectedTurnId) ? selectedTurnId : turns[0]?.id ?? null;
 
@@ -863,7 +882,7 @@ function ReportsTab({ gameId, turns }: { gameId: string; turns: any[] }) {
     ['turn-report', gameId, activeTurnId],
     async () => {
       const { data } = await gamesApi.getTurnReport(gameId, activeTurnId!);
-      return data as { turn: any; sections: Array<{ title: string; entries: any[] }> };
+      return data as { turn: any; sections: Array<{ key?: string; title: string; nation?: string; allegiance?: string; entries: any[] }> };
     },
     { enabled: !!gameId && !!activeTurnId, retry: false }
   );
@@ -899,21 +918,53 @@ function ReportsTab({ gameId, turns }: { gameId: string; turns: any[] }) {
           )}
           {data.sections.map((s, i) => (
             <div key={i} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-              <h3 className="text-md font-bold text-mepbm-gold mb-2">{s.title}</h3>
-              <div className="space-y-1">
-                {(s.entries || []).map((e: any, j: number) => (
-                  <div key={j} className="text-sm text-gray-300">
-                    {Object.entries(e || {})
-                      .filter(([, v]) => v === null || ['string', 'number', 'boolean'].includes(typeof v))
-                      .map(([k, v]) => (
-                        <span key={k} className="mr-3">
-                          <span className="text-gray-500">{k}: </span>
-                          <span className="text-gray-100">{String(v)}</span>
-                        </span>
-                      ))}
-                  </div>
-                ))}
-              </div>
+              <h3 className="text-md font-bold text-mepbm-gold mb-2">{sectionTitle(s, tr, lang)}</h3>
+              {s.key === 'economy' ? (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-gray-500 uppercase">
+                      <th className="py-1 pr-3">{tr('rep.thNation')}</th>
+                      <th className="py-1 pr-3 text-right">{tr('rep.thGold')}</th>
+                      <th className="py-1 pr-3 text-right">{tr('rep.thFood')}</th>
+                      <th className="py-1 pr-3 text-right">{tr('rep.thTax')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {(s.entries || []).map((e: any, j: number) => (
+                      <tr key={j} className="text-gray-200">
+                        <td className="py-1 pr-3">{trNation(e.nation ?? '', lang)}</td>
+                        <td className="py-1 pr-3 text-right font-mono">{e.gold ?? 0}</td>
+                        <td className="py-1 pr-3 text-right font-mono">{e.food ?? 0}</td>
+                        <td className="py-1 pr-3 text-right font-mono">{e.tax ?? 0}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : s.key === 'summary' || s.key === 'nation' ? (
+                <dl className="space-y-2">
+                  {(s.entries || []).map((e: any, j: number) => (
+                    <div key={j} className="text-sm">
+                      <dt className="inline text-gray-500">{sectionCat(e.category, tr)}: </dt>
+                      <dd className="inline text-gray-200">{e.detail}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : s.key === 'famine' ? (
+                <div className="space-y-2">
+                  {(s.entries || []).map((e: any, j: number) => (
+                    <div key={j} className="bg-red-900/30 rounded px-3 py-2 border border-red-800 text-sm">
+                      <span className="font-bold text-red-300">{trNation(e.nation ?? '', lang)} · {e.army}</span>
+                      {e.message ? <p className="text-gray-300 mt-1">{e.message}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(s.entries || []).map((e: any, j: number) => (
+                    <ReportOrderEntry key={j} e={e} lang={lang} />
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -1379,6 +1430,8 @@ function Tip({ trigger, children }: { trigger: React.ReactNode; children: React.
 
 function ArtifactChip({ a, holder, nationName, t }: { a: any; holder: string; nationName?: string; t: TFunc }) {
   const { lang } = useLang();
+  const es = lang === 'es';
+  const dispName = es ? (a.nameEs ?? a.name ?? a.Name ?? '?') : (a.name ?? a.Name ?? '?');
   const primary = lang === 'es' ? (a.primaryEs ?? a.primaryBenefit ?? a.PrimaryBenefit) : (a.primaryBenefit ?? a.PrimaryBenefit);
   const secondary = lang === 'es' ? (a.secondaryEs ?? a.secondaryPower ?? a.SecondaryPower) : (a.secondaryPower ?? a.SecondaryPower);
   const type = a.type ?? a.Type;
@@ -1390,12 +1443,12 @@ function ArtifactChip({ a, holder, nationName, t }: { a: any; holder: string; na
     <Tip
       trigger={
         <span className="inline-block px-2 py-1 rounded bg-gray-700 border border-amber-600/60 text-xs text-amber-200">
-          {wikiId ? `#${wikiId} ` : ''}{a.name ?? a.Name ?? '?'}
+          {wikiId ? `#${wikiId} ` : ''}{dispName}
         </span>
       }
     >
-      <span className="block text-amber-200 font-bold text-sm">{wikiId ? `#${wikiId} ` : ''}{a.name ?? a.Name ?? 'Artifact'}</span>
-      {type && <span className="block text-xs text-gray-400 mt-0.5">{type}</span>}
+      <span className="block text-amber-200 font-bold text-sm">{wikiId ? `#${wikiId} ` : ''}{dispName}</span>
+      {type && <span className="block text-xs text-gray-400 mt-0.5">{artifactType(type, lang)}</span>}
       {primary && <span className="block text-sm text-gray-200 mt-1">{primary}</span>}
       {secondary && secondary !== '-' && <span className="block text-sm text-gray-200">{secondary}</span>}
       <span className="block text-sm text-gray-200 mt-1">{t('char.artBonus', { x: bonus })}</span>
@@ -1412,6 +1465,7 @@ function SpellChip({ s, t }: { s: any; t: TFunc }) {
   const es = lang === 'es';
   const id = s.spellId ?? s.SpellId;
   const info = SPELL_DEFINITIONS.find((d: any) => d.id === id);
+  const dispName = es ? (s.nameEs ?? s.name ?? s.Name ?? info?.name ?? '?') : (s.name ?? s.Name ?? info?.name ?? '?');
   const college = es ? (s.collegeEs ?? s.wikiCollege ?? info?.category ?? s.college ?? '') : (s.wikiCollege ?? info?.category ?? s.college ?? '');
   const minRank = s.minRank ?? info?.minCastingRank;
   const difficulty = es ? (s.difficultyEs ?? s.difficulty) : s.difficulty;
@@ -1423,11 +1477,11 @@ function SpellChip({ s, t }: { s: any; t: TFunc }) {
     <Tip
       trigger={
         <span className="inline-block px-2 py-1 rounded bg-gray-700 border border-violet-500/60 text-xs text-violet-200">
-          #{id} {s.name ?? s.Name ?? info?.name ?? '?'} <span className="text-gray-400">({s.rank ?? s.Rank ?? 0})</span>
+          #{id} {dispName} <span className="text-gray-400">({s.rank ?? s.Rank ?? 0})</span>
         </span>
       }
     >
-      <span className="block text-violet-200 font-bold text-sm">#{id} {s.name ?? s.Name ?? info?.name ?? 'Spell'}</span>
+      <span className="block text-violet-200 font-bold text-sm">#{id} {dispName}</span>
       <span className="block text-xs text-gray-400 mt-0.5">
         {college}{difficulty ? ` · ${difficulty}` : ''}{minRank != null ? ` · ${t('char.spMinRank', { x: minRank })}` : ''} · {t('char.spRank', { x: s.rank ?? s.Rank ?? 0 })}
       </span>
