@@ -40,7 +40,7 @@ public class OrdersController : ControllerBase
         var orders = await _db.Orders
             .Include(o => o.Character)
             .Where(o => o.GameId == gameId && o.TurnId == currentTurn.Id && (scope == "*" || o.NationId == scope))
-            .OrderBy(o => o.SubmittedAt)
+            .OrderBy(o => o.Code).ThenBy(o => o.SubmittedAt)
             .ToListAsync();
 
         var orderDtos = orders.Select(o => new

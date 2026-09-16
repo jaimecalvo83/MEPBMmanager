@@ -65,7 +65,7 @@ function OrderComposer({
     ? ((eligErrDetail as any)?.response?.data?.error || 'Could not load eligible orders')
     : null;
   const availableOrders = useMemo(
-    () => ORDER_DEFINITIONS.filter((o) => eligibleSet.has(o.code)),
+    () => ORDER_DEFINITIONS.filter((o) => eligibleSet.has(o.code)).sort((a, b) => a.code - b.code),
     [eligibleSet]
   );
 
@@ -445,7 +445,7 @@ export default function OrdersPanel({ gameId, characters }: OrdersPanelProps) {
             key={c.id}
             gameId={gameId}
             character={c}
-            pending={(orders ?? []).filter((o) => o.characterId === c.id && o.status === 'pending')}
+            pending={(orders ?? []).filter((o) => o.characterId === c.id && o.status === 'pending').sort((a, b) => a.code - b.code)}
             onChanged={() => {
               queryClient.invalidateQueries(['orders', gameId]);
               force((x) => x + 1);
