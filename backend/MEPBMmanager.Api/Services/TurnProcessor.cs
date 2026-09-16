@@ -750,6 +750,7 @@ public class TurnProcessor
         ConsumeMaterial(order.Nation, armourMat, matUnits);
 
         var existing = CountTroops(order.Army);
+        var typeCount = TroopCount(order.Army, troopType);
         var baseTraining = Math.Max(order.Army.Training, 10);
         // La base nacional (RECRUIT_TRAINING_*) es suelo: manda el mando del general si es mayor.
         var nationBase = NationAbilities.RecruitTrainingFor(order.Nation?.Name, troopType);
@@ -766,7 +767,6 @@ public class TurnProcessor
         SetTroopWeaponRank(order.Army, troopType, Math.Max(TroopWeaponRank(order.Army, troopType), weaponRank));
         SetTroopArmourRank(order.Army, troopType, Math.Max(TroopArmourRank(order.Army, troopType), armourRank));
         // Training medio de la agrupación (tipo): los nuevos promedian con los que ya hay.
-        var typeCount = TroopCount(order.Army, troopType);
         var typeBase = Math.Max(TroopTraining(order.Army, troopType), 10);
         SetTroopTraining(order.Army, troopType, typeCount == 0
             ? recruitTraining

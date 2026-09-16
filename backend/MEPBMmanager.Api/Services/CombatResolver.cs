@@ -814,15 +814,8 @@ public class CombatResolver
             c.Army.Morale = Math.Max(0, Math.Min(100, c.Army.Morale + delta));
     }
 
-    private static bool IsCombatArtifact(string type)
-    {
-        return type switch
-        {
-            "combat" or "weapon" or "armor" or "armour" or "amulet"
-                or "sword" or "shield" or "ring" or "helm" or "staff" => true,
-            _ => false
-        };
-    }
+    private static bool IsCombatArtifact(string? type) =>
+        TurnProcessor.CombatArtifactTypes.Contains(type ?? "");
 
     // ══════════════════════════════════════════════════════════════
     //  CÁLCULOS
