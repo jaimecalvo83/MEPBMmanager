@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 export interface SearchOption {
   value: string;
   label: string;
+  tooltip?: ReactNode;
 }
 
 export default function SearchSelect({
@@ -18,6 +19,7 @@ export default function SearchSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [tip, setTip] = useState<{ x: number; y: number; node: ReactNode } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -46,6 +48,7 @@ export default function SearchSelect({
   const pick = (v: string) => {
     onChange(v);
     setOpen(false);
+    setTip(null);
   };
 
   return (
@@ -84,7 +87,10 @@ export default function SearchSelect({
             placeholder={placeholder ?? 'Type to search…'}
             className="w-full p-2 bg-gray-700 rounded border border-mepbm-gold focus:outline-none"
           />
-          <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto bg-gray-800 rounded border border-gray-600 shadow-lg">
+          <div
+            className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto bg-gray-800 rounded border border-gray-600 shadow-lg"
+            onScroll={() => setTip(null)}
+          >
             {filtered.length === 0 && (
               <div className="px-3 py-2 text-sm text-gray-500">No matches</div>
             )}
@@ -94,6 +100,9 @@ export default function SearchSelect({
                 key={o.value}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pick(o.value)}
+                onMouseEnter={(e) => { if (o.tooltip) setTip({ x: e.clientX, y: e.clientY, node: o.tooltip }); }}
+                onMouseMove={(e) => { if (o.tooltip) setTip({ x: e.clientX, y: e.clientY, node: o.tooltip }); }}
+                onMouseLeave={() => setTip(null)}
                 className={`w-full text-left px-3 py-2 text-sm transition ${
                   o.value === value
                     ? 'bg-mepbm-gold text-gray-900 font-bold'
@@ -104,6 +113,19 @@ export default function SearchSelect({
               </button>
             ))}
           </div>
+          {open && tip?.node != null && (() => {
+            const w = 320;
+            const left = Math.max(8, Math.min(tip.x + 16, window.innerWidth - w - 8));
+            const top = Math.max(8, Math.min(tip.y + 16, window.innerHeight - 220));
+            return (
+              <div
+                className="fixed z-50 w-80 max-w-[80vw] max-h-56 overflow-y-auto rounded-none bg-gray-900 border-2 border-mepbm-gold p-3 text-left shadow-xl pointer-events-none"
+                style={{ left, top }}
+              >
+                {tip.node}
+              </div>
+            );
+          })()}
         </div>
       )}
       {open && (

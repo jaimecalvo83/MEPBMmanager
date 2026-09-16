@@ -1,6 +1,40 @@
 import { ORDER_DEFINITIONS } from '@MEPBMmanager/shared';
+import type { OrderRestriction } from '@MEPBMmanager/shared';
 import { ORDER_SCHEMAS } from './orderSchemas';
 import type { OrderFieldSpec } from '../../hooks/useOrders';
+
+const RESTRICTION_TEXT: Record<OrderRestriction, string> = {
+  c: 'command',
+  a: 'agent',
+  e: 'emissary',
+  m: 'mage',
+  com: 'force commander',
+  company: 'in a company',
+  without: 'without troops',
+  cap: 'at capital',
+  fa: 'Fourth Age only',
+  k: 'kingdom',
+};
+
+// Browsing tooltip for the order dropdown (static info, no character context).
+export function OrderDropdownTip({ code }: { code: number }) {
+  const def = ORDER_DEFINITIONS.find((d) => d.code === code);
+  const schema = ORDER_SCHEMAS[code];
+  if (!def) return <span className="text-mepbm-gold">[{code}]</span>;
+  return (
+    <span>
+      <span className="block text-mepbm-gold font-bold text-sm">[{def.code}] {def.name}</span>
+      <span className="block text-xs text-gray-400 mt-0.5">{def.abbreviation} · {def.difficulty}{def.skillIncrease ? ' · +skill' : ''}</span>
+      <span className="block text-sm text-gray-200 mt-2">{def.description}</span>
+      {schema?.help && <span className="block text-xs text-gray-400 italic mt-1">{schema.help}</span>}
+      {def.restrictions.length > 0 && (
+        <span className="block text-xs text-gray-300 mt-2">
+          Requires: {def.restrictions.map((r) => RESTRICTION_TEXT[r] ?? r).join(' / ')}
+        </span>
+      )}
+    </span>
+  );
+}
 
 // Square tooltip on the gold order name with all order information.
 export function OrderInfoTip({ code, requires, costs, expectedGold, maxAmount }: {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOrders, useSubmitOrder, useCancelOrder, useValidateOrders, useEligibleOrders, useOrderEstimate, OrderFieldSpec } from '../../hooks/useOrders';
 import { ORDER_DEFINITIONS } from '@MEPBMmanager/shared';
 import { ORDER_SCHEMAS } from './orderSchemas';
-import { OrderInfoTip } from './OrderInfoTip';
+import { OrderDropdownTip, OrderInfoTip } from './OrderInfoTip';
 import SearchSelect from './SearchSelect';
 import { useQueryClient } from 'react-query';
 
@@ -211,6 +211,7 @@ function OrderComposer({
         options={availableOrders.map((order) => ({
           value: String(order.code),
           label: `[${order.code}] ${order.abbreviation} - ${order.name}`,
+          tooltip: <OrderDropdownTip code={order.code} />,
         }))}
         onChange={(v) => {
           setOrderCode(v === '' ? 0 : parseInt(v, 10));
