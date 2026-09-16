@@ -1258,6 +1258,13 @@ function ArtifactChip({ a, holder, nationName }: { a: any; holder: string; natio
 function SpellChip({ s }: { s: any }) {
   const id = s.spellId ?? s.SpellId;
   const info = SPELL_DEFINITIONS.find((d: any) => d.id === id);
+  const college = s.wikiCollege ?? info?.category ?? s.college ?? '';
+  const minRank = s.minRank ?? info?.minCastingRank;
+  const difficulty = s.difficulty;
+  const castOrder = s.castOrder;
+  const prereqs = s.prerequisites;
+  const reqInfo = s.requiredInfo;
+  const effect = s.effect ?? info?.description;
   return (
     <Tip
       trigger={
@@ -1268,9 +1275,12 @@ function SpellChip({ s }: { s: any }) {
     >
       <span className="block text-violet-200 font-bold text-sm">#{id} {s.name ?? s.Name ?? info?.name ?? 'Spell'}</span>
       <span className="block text-xs text-gray-400 mt-0.5">
-        {s.college ?? info?.category ?? ''}{info?.minCastingRank != null ? ` · min rank ${info.minCastingRank}` : ''} · rank {s.rank ?? s.Rank ?? 0}
+        {college}{difficulty ? ` · ${difficulty}` : ''}{minRank != null ? ` · min rank ${minRank}` : ''} · rank {s.rank ?? s.Rank ?? 0}
       </span>
-      {info?.description && <span className="block text-sm text-gray-200 mt-1">{info.description}</span>}
+      {effect && <span className="block text-sm text-gray-200 mt-1">{effect}</span>}
+      {prereqs && <span className="block text-sm text-gray-200 mt-1">Prerequisites: {prereqs}</span>}
+      {reqInfo && <span className="block text-sm text-gray-200">Required info: {reqInfo}</span>}
+      {castOrder && <span className="block text-xs text-gray-400 mt-1">{castOrder}</span>}
     </Tip>
   );
 }

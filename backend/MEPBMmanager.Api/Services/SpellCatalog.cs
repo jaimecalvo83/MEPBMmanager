@@ -21,6 +21,12 @@ public class SpellDefinition
     public SpellType Type { get; set; }
     public bool IsLost { get; set; } = false;
     public int MinCastingRank { get; set; } = 0;
+    public string WikiCollege { get; set; } = string.Empty;
+    public string Difficulty { get; set; } = string.Empty;
+    public string CastOrder { get; set; } = string.Empty;
+    public string Prerequisites { get; set; } = string.Empty;
+    public string RequiredInfo { get; set; } = string.Empty;
+    public string Effect { get; set; } = string.Empty;
 }
 
 public static class SpellCatalog
@@ -49,7 +55,13 @@ public static class SpellCatalog
             College = s.Category.ToString(),
             Type = MapType(s.Category),
             IsLost = LostIds.Contains(s.Id),
-            MinCastingRank = s.MinCastingRank
+            MinCastingRank = s.MinCastingRank,
+            WikiCollege = s.College,
+            Difficulty = s.Difficulty,
+            CastOrder = s.CastOrder,
+            Prerequisites = s.Prerequisites,
+            RequiredInfo = s.RequiredInfo,
+            Effect = s.Effect
         })
         .ToList();
 

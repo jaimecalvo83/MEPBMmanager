@@ -473,12 +473,12 @@ public class OrdersController : ControllerBase
         new("1", "1 Tower"), new("2", "2 Fort"), new("3", "3 Castle"), new("4", "4 Keep"), new("5", "5 Citadel")
     };
 
-    // Hechizos de lore por tipo de diana (940 criba el formulario según hechizo).
-    private static readonly HashSet<int> LoreCharSpells = new() { 408, 417, 420, 422, 424, 430, 436 };
-    private static readonly HashSet<int> LoreNationSpells = new() { 402, 404, 410, 419 };
+    // Hechizos de lore por tipo de diana (wiki: Required Information).
+    private static readonly HashSet<int> LoreCharSpells = new() { 408, 420, 422, 424, 430, 436 };
+    private static readonly HashSet<int> LoreCommanderSpells = new() { 406, 417, 426 };
+    private static readonly HashSet<int> LoreNationSpells = new() { 404, 419, 432 };
+    private static readonly HashSet<int> LoreAllegianceSpells = new() { 402, 410 };
     private static readonly HashSet<int> LoreArtifactSpells = new() { 412, 418, 428 };
-    private static readonly HashSet<int> LorePcSpells = new() { 413, 416, 434 };
-    private static readonly HashSet<int> LoreArmySpells = new() { 406, 426 };
 
     private List<OrderFieldSpecDto> RequiresFor(int code, EstimateCtx ctx)
     {
@@ -513,20 +513,18 @@ public class OrdersController : ControllerBase
             if (LoreCharSpells.Contains(sid))
                 fields.Add(Sel("targetId", "Target character",
                     CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => !c.IsDead))));
+            else if (LoreCommanderSpells.Contains(sid))
+                fields.Add(Sel("commanderId", "Force commander",
+                    CharOpts(ctx.Game.Nations.SelectMany(n => n.Characters).Where(c => !c.IsDead
+                        && (c.ArmyId != null || ctx.Game.Nations.SelectMany(x => x.Navies).Any(v => v.CommanderId == c.Id))))));
             else if (LoreNationSpells.Contains(sid))
                 fields.Add(Sel("nationId", "Target nation", allNations));
+            else if (LoreAllegianceSpells.Contains(sid))
+                fields.Add(Sel("allegiance", "Allegiance", AllegianceOptions));
             else if (LoreArtifactSpells.Contains(sid))
                 fields.Add(Sel("artifactId", "Artifact", _db.Artifacts.ToList()
                     .Select(a => new OrderFieldOptionDto(a.Id, a.HeldByCharacterId != null
                         ? $"{a.Name} (held)" : $"{a.Name} @ {a.LocationHex ?? "?"}")).ToList()));
-            else if (LorePcSpells.Contains(sid))
-                fields.Add(Sel("pcId", "Population centre", ctx.Game.Nations
-                    .SelectMany(n => n.PopulationCentres.Select(p => new { p, n.Name }))
-                    .Select(x => new OrderFieldOptionDto(x.p.Id, $"{x.p.Name} ({x.p.Size}, {x.Name}) @ {x.p.LocationHex}")).ToList()));
-            else if (LoreArmySpells.Contains(sid))
-                fields.Add(Sel("armyId", "Army", ctx.Game.Nations
-                    .SelectMany(n => n.Armies.Select(a => new { a, n.Name }))
-                    .Select(x => new OrderFieldOptionDto(x.a.Id, $"{x.a.Name} ({x.Name}) @ {x.a.LocationHex}")).ToList()));
             else
                 fields.Add(Hx("hex", "Hex (empty = here)", req: false));
             return fields;
@@ -1074,8 +1072,16 @@ public class OrdersController : ControllerBase
             if (S("targetId") is { } t1 && FC(t1) == null) errors.Add("Target character not found");
             if (S("nationId") is { } n1 && !game.Nations.Any(x => x.Id == n1)) errors.Add("Nation not found");
             if (S("artifactId") is { } a1 && !_db.Artifacts.Any(x => x.Id == a1)) errors.Add("Artifact not found");
-            if (S("pcId") is { } p1 && !game.Nations.SelectMany(x => x.PopulationCentres).Any(p => p.Id == p1)) errors.Add("Population centre not found");
-            if (S("armyId") is { } m1 && !game.Nations.SelectMany(x => x.Armies).Any(a => a.Id == m1)) errors.Add("Army not found");
+            if (S("commanderId") is { } c1)
+            {
+                var boss = FC(c1);
+                if (boss == null || boss.IsDead) errors.Add("Commander not found");
+                else if (!game.Nations.SelectMany(x => x.Armies).Any(a => a.CommanderId == boss.Id)
+                    && !game.Nations.SelectMany(x => x.Navies).Any(v => v.CommanderId == boss.Id))
+                    errors.Add($"{boss.Name} commands no force");
+            }
+            if (S("allegiance") is { } al && al != "free_peoples" && al != "dark_servants" && al != "neutral")
+                errors.Add("Allegiance must be free_peoples, dark_servants or neutral");
         }
         if (code == 949)
         {

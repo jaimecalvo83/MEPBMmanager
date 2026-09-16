@@ -2996,11 +2996,12 @@ public class TurnProcessor
         // Cada hechizo mira un tipo de diana (el formulario solo ofrece la suya).
         var kind = def.Id switch
         {
-            408 or 417 or 420 or 422 or 424 or 430 or 436 => "char",
-            402 or 404 or 410 or 419 => "nation",
+            408 or 420 or 422 or 424 or 430 or 436 => "char",
+            406 or 417 or 426 => "commander",
+            404 or 419 => "nation",
+            432 => "secrets",
+            402 or 410 => "allegiance",
             412 or 418 or 428 => "artifact",
-            413 or 416 or 434 => "pc",
-            406 or 426 => "army",
             _ => "hex"
         };
 
@@ -3035,22 +3036,54 @@ public class TurnProcessor
             return MakeResult(order, order.Result);
         }
 
-        if (kind == "pc" && parameters.TryGetValue("pcId", out var pcEl))
+        if (kind == "commander" && parameters.TryGetValue("commanderId", out var cmdEl))
         {
-            var pc = game.Nations.SelectMany(n => n.PopulationCentres).FirstOrDefault(p => p.Id == pcEl.GetString());
-            if (pc == null) return MakeResult(order, "Population centre not found", false);
-            var pcNation = game.Nations.FirstOrDefault(n => n.Id == pc.NationId)?.Name ?? "?";
+            var boss = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == cmdEl.GetString());
+            if (boss == null || boss.IsDead) return MakeResult(order, "Commander not found", false);
+            var forceArmy = game.Nations.SelectMany(n => n.Armies).FirstOrDefault(a => a.CommanderId == boss.Id);
+            var forceNavy = forceArmy == null
+                ? game.Nations.SelectMany(n => n.Navies).FirstOrDefault(v => v.CommanderId == boss.Id)
+                : null;
+            if (forceArmy == null && forceNavy == null)
+                return MakeResult(order, $"{boss.Name} commands no force", false);
             order.Status = "resolved";
-            order.Result = $"Scry reveals {pc.Name} ({pc.Size}) of {pcNation} at {pc.LocationHex}, loyalty {pc.Loyalty}, production {pc.Production}, fortifications {pc.Fortification ?? "none"}" + (pc.HasPort ? ", port" : pc.HasHarbour ? ", harbour" : "");
+            if (def.Id == 417)
+            {
+                var members = forceArmy != null
+                    ? game.Nations.SelectMany(n => n.Characters).Where(c => c.ArmyId == forceArmy.Id && !c.IsDead).Select(c => c.Name).ToList()
+                    : new List<string> { boss.Name };
+                order.Result = $"Scry reveals travelling with {boss.Name}: {string.Join(", ", members)}";
+            }
+            else
+            {
+                var forceHex = forceArmy?.LocationHex ?? forceNavy!.LocationHex;
+                var fn = game.Nations.FirstOrDefault(n => n.Id == (forceArmy?.NationId ?? forceNavy!.NationId))?.Name ?? "?";
+                order.Result = $"Scry reveals {boss.Name}'s force ({fn}) at {forceHex}";
+            }
             return MakeResult(order, order.Result);
         }
-        if (kind == "army" && parameters.TryGetValue("armyId", out var arEl))
+        if (kind == "allegiance" && parameters.TryGetValue("allegiance", out var alEl))
         {
-            var scryArmy = game.Nations.SelectMany(n => n.Armies).FirstOrDefault(x => x.Id == arEl.GetString());
-            if (scryArmy == null) return MakeResult(order, "Army not found", false);
-            var scryNation = game.Nations.FirstOrDefault(n => n.Id == scryArmy.NationId)?.Name ?? "?";
+            var al = (alEl.GetString() ?? "").ToLower();
+            if (al != "free_peoples" && al != "dark_servants" && al != "neutral")
+                return MakeResult(order, "Allegiance must be free_peoples, dark_servants or neutral", false);
+            var found = game.Nations.Where(n => n.Allegiance == al)
+                .Select(n => $"{n.Name} ({n.PopulationCentres.Count} centres, capital {n.PopulationCentres.FirstOrDefault(p => p.IsCapital)?.LocationHex ?? "?"})")
+                .ToList();
             order.Status = "resolved";
-            order.Result = $"Scry reveals {scryArmy.Name} of {scryNation} at {scryArmy.LocationHex}: HC:{scryArmy.HeavyCavalry} LC:{scryArmy.LightCavalry} HI:{scryArmy.HeavyInfantry} LI:{scryArmy.LightInfantry} AR:{scryArmy.Archers} MA:{scryArmy.MenAtArms}, morale {scryArmy.Morale}";
+            order.Result = found.Count > 0
+                ? $"Scry reveals {al} nations: {string.Join("; ", found)}"
+                : $"Scry reveals no {al} nations";
+            return MakeResult(order, order.Result);
+        }
+        if (kind == "secrets" && parameters.TryGetValue("nationId", out var secEl))
+        {
+            var nat = game.Nations.FirstOrDefault(n => n.Id == secEl.GetString());
+            if (nat == null) return MakeResult(order, "Nation not found", false);
+            var cap = nat.PopulationCentres.FirstOrDefault(p => p.IsCapital)?.LocationHex ?? "?";
+            var status = nat.IsEliminated ? "eliminated" : "active";
+            order.Status = "resolved";
+            order.Result = $"Scry reveals {nat.Name}: capital at {cap}, victory points {nat.VictoryPoints}, status {status}, {nat.Characters.Count(c => !c.IsDead)} characters";
             return MakeResult(order, order.Result);
         }
 

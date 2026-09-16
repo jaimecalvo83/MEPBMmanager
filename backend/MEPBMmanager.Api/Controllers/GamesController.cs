@@ -1364,7 +1364,14 @@ public class GamesController : ControllerBase
                     s.SpellId,
                     name = SpellCatalog.Get(s.SpellId)?.Name ?? $"Spell {s.SpellId}",
                     s.Rank,
-                    college = SpellCatalog.Get(s.SpellId)?.Type.ToString()
+                    college = SpellCatalog.Get(s.SpellId)?.Type.ToString(),
+                    minRank = SpellCatalog.Get(s.SpellId)?.MinCastingRank,
+                    wikiCollege = SpellCatalog.Get(s.SpellId)?.WikiCollege,
+                    difficulty = SpellCatalog.Get(s.SpellId)?.Difficulty,
+                    castOrder = SpellCatalog.Get(s.SpellId)?.CastOrder,
+                    prerequisites = SpellCatalog.Get(s.SpellId)?.Prerequisites,
+                    requiredInfo = SpellCatalog.Get(s.SpellId)?.RequiredInfo,
+                    effect = SpellCatalog.Get(s.SpellId)?.Effect
                 })
             }),
             armies = armies.Select(a => new
