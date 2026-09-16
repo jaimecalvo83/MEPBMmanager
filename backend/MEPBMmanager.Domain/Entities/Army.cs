@@ -41,6 +41,11 @@ public class Army
     public int MAATraining { get; set; } = 10;
     public int Food { get; set; } = 0;
     public int WarMachines { get; set; } = 0;
+    // Tren: máquinas, armas/armaduras de repuesto y comida (wiki).
+    public int SpareWeapons { get; set; } = 0;
+    public string SpareWeaponsMaterial { get; set; } = "none";
+    public int SpareArmour { get; set; } = 0;
+    public string SpareArmourMaterial { get; set; } = "none";
     public bool IsOnManoeuvres { get; set; } = false;
     
     public Nation Nation { get; set; } = null!;

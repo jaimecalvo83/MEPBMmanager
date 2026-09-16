@@ -129,7 +129,7 @@ public static class Map2950Seeder
         string NationSlug, int Q, int R,
         int HeavyCavalry, int LightCavalry, int HeavyInfantry, int LightInfantry,
         int Archers, int MenAtArms, int Warships, int Transports, int Morale,
-        int Training = 60, int Weapons = 40, int Armour = 0, int Food = 1000)
+        int Training = 60, int Weapons = 30, int Armour = 0, int Food = 1000)
     {
         public int TotalLandTroops => HeavyCavalry + LightCavalry + HeavyInfantry + LightInfantry + Archers + MenAtArms;
     }

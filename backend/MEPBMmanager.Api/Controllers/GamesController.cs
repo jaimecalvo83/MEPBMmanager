@@ -1408,6 +1408,10 @@ public class GamesController : ControllerBase
                 a.ArcherTraining,
                 a.MAATraining,
                 a.Food,
+                a.SpareWeapons,
+                a.SpareWeaponsMaterial,
+                a.SpareArmour,
+                a.SpareArmourMaterial,
                 a.WarMachines,
                 a.IsOnManoeuvres
             }),

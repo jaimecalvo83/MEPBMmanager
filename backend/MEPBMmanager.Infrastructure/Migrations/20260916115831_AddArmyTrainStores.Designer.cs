@@ -3,6 +3,7 @@ using System;
 using MEPBMmanager.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MEPBMmanager.Infrastructure.Migrations
 {
     [DbContext(typeof(MepbmDbContext))]
-    partial class MepbmDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916115831_AddArmyTrainStores")]
+    partial class AddArmyTrainStores
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -123,19 +126,20 @@ namespace MEPBMmanager.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("SpareArmour")
+                    b.Property<int>("TrainBronze")
                         .HasColumnType("integer");
 
-                    b.Property<string>("SpareArmourMaterial")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("SpareWeapons")
+                    b.Property<int>("TrainLeather")
                         .HasColumnType("integer");
 
-                    b.Property<string>("SpareWeaponsMaterial")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("TrainMithril")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TrainSteel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TrainTimber")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Training")
                         .HasColumnType("integer");

@@ -1155,12 +1155,30 @@ const TROOP_ROWS = [
   { key: 'menAtArms', label: 'Men-at-Arms', w: 'maaWeaponRank', a: 'maaArmourRank', tr: 'maaTraining' },
 ];
 
-function materialName(rank: number): string {
+function materialName(rank: number, kind: 'weapon' | 'armour'): string {
   if (rank >= 100) return 'mithril';
   if (rank >= 60) return 'steel';
-  if (rank >= 40) return 'bronze';
-  if (rank >= 20) return 'leather';
-  return 'none';
+  if (rank >= 30) return 'bronze';
+  if (kind === 'armour') return rank >= 10 ? 'leather' : 'none';
+  return rank >= 10 ? 'wood' : 'none';
+}
+
+// Wiki (armies topic) + CombatResolver: Str/Con base, best/worst tactic, upkeep.
+const TROOP_INFO: Record<string, { str: number; con: number; best: string; worst: string; terrain: string; gold: number; food: number }> = {
+  heavyCavalry: { str: 16, con: 16, best: 'ch', worst: 'am', terrain: 'plains', gold: 6, food: 2 },
+  lightCavalry: { str: 8, con: 8, best: 'su', worst: 'am', terrain: 'plains / desert / coast', gold: 3, food: 2 },
+  heavyInfantry: { str: 10, con: 10, best: 'fl', worst: 'su', terrain: 'hills / mountains', gold: 4, food: 1 },
+  lightInfantry: { str: 5, con: 5, best: 'hr', worst: 'ch', terrain: 'forest', gold: 2, food: 1 },
+  archers: { str: 6, con: 2, best: 'am', worst: 'fl', terrain: 'hills / forest', gold: 2, food: 1 },
+  menAtArms: { str: 2, con: 2, best: 'hr', worst: 'ch', terrain: 'plains / hills / coast', gold: 1, food: 1 },
+};
+
+function armyFoodCost(army: any): number {
+  return TROOP_ROWS.reduce((s, t) => s + (army[t.key] || 0) * (TROOP_INFO[t.key]?.food ?? 1), 0);
+}
+
+function armyGoldCost(army: any): number {
+  return TROOP_ROWS.reduce((s, t) => s + (army[t.key] || 0) * (TROOP_INFO[t.key]?.gold ?? 0), 0);
 }
 
 function armyTroopTotal(army: any): number {
@@ -1203,10 +1221,15 @@ function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName
         const pcLine = pcSentence(populationCentres, army.locationHex, nationName);
         const members = characters.filter((c: any) => c.armyId === army.id);
         const total = armyTroopTotal(army);
-        const eats = Math.floor(total / 100);
+        const eats = armyFoodCost(army);
+        const upkeep = armyGoldCost(army);
         const food = army.food ?? 0;
         const turns = eats > 0 ? Math.floor(food / eats) : null;
         const rows = TROOP_ROWS.filter((t) => (army[t.key] || 0) > 0);
+        const sparesW = army.spareWeapons ?? 0;
+        const sparesWMat = army.spareWeaponsMaterial ?? 'none';
+        const sparesA = army.spareArmour ?? 0;
+        const sparesAMat = army.spareArmourMaterial ?? 'none';
         return (
           <div key={army.id} className="bg-gray-800 rounded-lg p-5 border border-gray-700 space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
@@ -1218,12 +1241,22 @@ function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName
             </div>
 
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Command & Stores</div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Command & Upkeep</div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <StatBox label="Morale" value={army.morale ?? 0} />
                 <StatBox label="Training (avg)" value={army.training ?? 0} />
-                <StatBox label="Food" value={`${food} · -${eats}/turn${turns != null ? ` (${turns} turns)` : ''}`} />
+                <StatBox label="Food/turn" value={`${eats} (${total} troops)`} />
+                <StatBox label="Gold/turn" value={upkeep} />
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Baggage Train</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <StatBox label="Food" value={`${food}${turns != null ? ` (${turns} turns)` : ''}`} />
                 <StatBox label="War Machines" value={army.warMachines ?? 0} />
+                <StatBox label="Spare Weapons" value={sparesW > 0 ? `${sparesW} ${sparesWMat}` : '—'} />
+                <StatBox label="Spare Armour" value={sparesA > 0 ? `${sparesA} ${sparesAMat}` : '—'} />
               </div>
             </div>
 
@@ -1246,7 +1279,9 @@ function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName
                       const w = army[t.w] ?? 0;
                       const a = army[t.a] ?? 0;
                       const tr = army[t.tr] ?? army.training ?? 0;
-                      const share = total > 0 && eats > 0 ? Math.max(1, Math.round((count / total) * eats)) : 0;
+                      const info = TROOP_INFO[t.key];
+                      const shareFood = count * (info?.food ?? 1);
+                      const shareGold = count * (info?.gold ?? 0);
                       return (
                         <tr key={t.key} className="text-gray-200">
                           <td className="py-1 pr-3">
@@ -1254,15 +1289,18 @@ function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName
                               trigger={<span className="cursor-help">{t.label}</span>}
                             >
                               <span className="block text-white font-bold text-sm">{t.label} × {count}</span>
-                              <span className="block text-sm text-gray-200 mt-1">Weapons: {materialName(w)} ({w})</span>
-                              <span className="block text-sm text-gray-200">Armour: {materialName(a)} ({a})</span>
+                              <span className="block text-sm text-gray-200 mt-1">Strength {info?.str} · Constitution {info?.con}</span>
+                              <span className="block text-sm text-gray-200">Upkeep: {shareGold} gold + {shareFood} food/turn ({info?.gold}g + {info?.food}f each)</span>
+                              <span className="block text-sm text-gray-200">Best tactic {info?.best} · worst {info?.worst}</span>
+                              <span className="block text-sm text-gray-200">Terrain: {info?.terrain}</span>
+                              <span className="block text-sm text-gray-200 mt-1">Weapons: {materialName(w, 'weapon')} ({w})</span>
+                              <span className="block text-sm text-gray-200">Armour: {materialName(a, 'armour')} ({a})</span>
                               <span className="block text-sm text-gray-200">Training: {tr}</span>
-                              <span className="block text-sm text-gray-200">Eats ~{share} food/turn</span>
                             </Tip>
                           </td>
                           <td className="py-1 pr-3 text-right font-mono">{count}</td>
-                          <td className="py-1 pr-3">{materialName(w)} <span className="text-gray-500 font-mono">({w})</span></td>
-                          <td className="py-1 pr-3">{materialName(a)} <span className="text-gray-500 font-mono">({a})</span></td>
+                          <td className="py-1 pr-3">{materialName(w, 'weapon')} <span className="text-gray-500 font-mono">({w})</span></td>
+                          <td className="py-1 pr-3">{materialName(a, 'armour')} <span className="text-gray-500 font-mono">({a})</span></td>
                           <td className="py-1 pr-3 font-mono">{tr}</td>
                         </tr>
                       );

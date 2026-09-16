@@ -20,7 +20,7 @@ export const TROOP_COST_PER_100: Record<TroopType, number> = {
 
 export const FOOD_PER_TROOP: Record<TroopType, number> = {
   hc: 2,
-  lc: 3,
+  lc: 2,
   hi: 1,
   li: 1,
   ar: 1,
@@ -28,19 +28,19 @@ export const FOOD_PER_TROOP: Record<TroopType, number> = {
 };
 
 export const MAINTENANCE_PER_100: Record<TroopType, number> = {
-  hc: 300,
-  lc: 150,
-  hi: 100,
-  li: 50,
-  ar: 75,
-  ma: 25,
+  hc: 600,
+  lc: 300,
+  hi: 400,
+  li: 200,
+  ar: 200,
+  ma: 100,
 };
 
 export const MATERIAL_RANK_VALUES: Record<MaterialRank, number> = {
   none: 0,
   wood: 10,
-  leather: 20,
-  bronze: 40,
+  leather: 10,
+  bronze: 30,
   steel: 60,
   mithril: 100,
 };

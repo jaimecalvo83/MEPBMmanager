@@ -219,7 +219,9 @@ public class TurnProcessor
             foreach (var army in nation.Armies)
             {
                 var foodCost = GetArmyFoodCost(army);
-                nation.Food -= foodCost;
+                var fromTrain = Math.Min(army.Food, foodCost);
+                army.Food -= fromTrain;
+                nation.Food -= foodCost - fromTrain;
 
                 if (nation.Food < 0)
                 {
@@ -308,9 +310,11 @@ public class TurnProcessor
         return upkeep;
     }
 
-    private int GetArmyFoodCost(Army army)
+    // Wiki: 2 por HC/LC (tropa + montura), 1 por resto.
+    public static int GetArmyFoodCost(Army army)
     {
-        return GetArmyTotalTroops(army) / 100;
+        return army.HeavyCavalry * 2 + army.LightCavalry * 2
+            + army.HeavyInfantry + army.LightInfantry + army.Archers + army.MenAtArms;
     }
 
     private static int GetArmyTotalTroops(Army army)
@@ -657,7 +661,7 @@ public class TurnProcessor
     // Rango de arma/armadura por material (370/375). Un solo material por orden.
     private static readonly Dictionary<string, int> MaterialRank = new(StringComparer.OrdinalIgnoreCase)
     {
-        { "leather", 20 }, { "bronze", 40 }, { "steel", 60 }, { "mithril", 100 }
+        { "leather", 10 }, { "bronze", 30 }, { "steel", 60 }, { "mithril", 100 }
     };
 
     // Nombres de campamento por nación (552/555 cuando no se indica nombre).

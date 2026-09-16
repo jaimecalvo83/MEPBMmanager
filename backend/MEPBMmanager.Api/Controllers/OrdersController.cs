@@ -457,7 +457,7 @@ public class OrdersController : ControllerBase
     };
     private static readonly List<OrderFieldOptionDto> MaterialOptions = new()
     {
-        new("leather", "Leather (20)"), new("bronze", "Bronze (40)"),
+        new("leather", "Leather (10)"), new("bronze", "Bronze (30)"),
         new("steel", "Steel (60)"), new("mithril", "Mithril (100)")
     };
     private static readonly List<OrderFieldOptionDto> TroopTypeOptions = new()
