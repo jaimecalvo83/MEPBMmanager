@@ -8,7 +8,7 @@ import {
   MAP2950_FORD_SIDES,
   MAP2950_BRIDGE_SIDES,
 } from '@MEPBMmanager/shared';
-import { useLang, terrainLabel } from '../../i18n/lang';
+import { useLang, terrainLabel, charTypeLabel, pcSizeLabel, fortLabel as fortName } from '../../i18n/lang';
 
 interface HexTile {
   q: number;
@@ -168,13 +168,13 @@ export default function HexMap({ hexes, armies = [], characters = [], population
     for (const c of characters) charById.set(c.id, c);
 
     for (const pc of populationCentres) {
-      const sizeLabel = pc.size ? pc.size.charAt(0).toUpperCase() + pc.size.slice(1) : '';
-      const fortLabel = pc.fortification ? ` [${pc.fortification}]` : '';
+      const sizeTxt = pcSizeLabel(pc.size, t);
+      const fortTxt = pc.fortification ? ` [${fortName(pc.fortification, t)}]` : '';
       allEntities.push({
         hex: pc.locationHex,
         type: 'pc',
         name: pc.name,
-        detail: `${sizeLabel}${pc.isCapital ? ' (Capital)' : ''}${fortLabel}`,
+        detail: `${sizeTxt}${pc.isCapital ? ` ${t('map.capitalSuffix')}` : ''}${fortTxt}`,
         data: pc,
       });
     }
@@ -183,25 +183,25 @@ export default function HexMap({ hexes, armies = [], characters = [], population
         (army.heavyInfantry || 0) + (army.lightInfantry || 0) +
         (army.archers || 0) + (army.menAtArms || 0);
       const commander = army.commanderId ? charById.get(army.commanderId) : null;
-      const general = commander ? ` — General: ${commander.name}` : '';
+      const general = commander ? ` — ${t('map.commander')}: ${commander.name}` : '';
       allEntities.push({
         hex: army.locationHex,
         type: 'army',
         name: army.name,
-        detail: `${totalTroops} troops${general}`,
+        detail: `${t('army.troopsWord', { n: totalTroops })}${general}`,
         data: army,
       });
     }
     for (const char of characters) {
       const loose = !char.armyId;
       const skills = `Cmd:${char.commandSkill || 0} Agt:${char.agentSkill || 0} Emb:${char.emissarySkill || 0} Mge:${char.mageSkill || 0}`;
-      const champ = char.isChampion ? ' [Champion]' : '';
-      const looseTag = loose ? ' (loose)' : '';
+      const champ = char.isChampion ? ` [${t('char.champion')}]` : '';
+      const looseTag = loose ? ` (${t('map.loose')})` : '';
       allEntities.push({
         hex: char.locationHex,
         type: 'character',
         name: char.name,
-        detail: `${char.type}${champ}${looseTag} — ${skills} HP:${char.health || 0}`,
+        detail: `${charTypeLabel(char.type, t)}${champ}${looseTag} — ${skills} HP:${char.health || 0}`,
         data: char,
       });
     }
@@ -240,14 +240,13 @@ export default function HexMap({ hexes, armies = [], characters = [], population
       // Tooltip with terrain + features + entities
       const hexKey = `${hex.q},${hex.r}`;
       const hexEntities = byHex.get(hexKey) || [];
-      let tooltipText = `Hex ${hex.q},${hex.r} — ${hex.terrain}`;
-      if (hex.ownerId) tooltipText += `\nOwner: ${hex.ownerId}`;
+      let tooltipText = `${t('map.hex', { q: hex.q, r: hex.r })} — ${terrainLabel(hex.terrain, t)}`;
       const feats: string[] = [];
-      if (hex.hasMajorRiver) feats.push('Major river');
-      if (hex.hasMinorRiver) feats.push('Minor river');
-      if (hex.hasRoad) feats.push('Road');
-      if (hex.hasFord) feats.push('Ford');
-      if (hex.hasBridge) feats.push('Bridge');
+      if (hex.hasMajorRiver) feats.push(t('map.majorRiver'));
+      if (hex.hasMinorRiver) feats.push(t('map.minorRiver'));
+      if (hex.hasRoad) feats.push(t('map.road'));
+      if (hex.hasFord) feats.push(t('map.ford'));
+      if (hex.hasBridge) feats.push(t('map.bridge'));
       if (feats.length > 0) tooltipText += `\n${feats.join(' · ')}`;
       for (const e of hexEntities) {
         tooltipText += `\n${entityIcon(e.type)} ${e.name} (${e.detail})`;
@@ -421,7 +420,7 @@ export default function HexMap({ hexes, armies = [], characters = [], population
       const bounds = hexes.map((hex) => toLatLng(hexToPixel(hex.q, hex.r)));
       map.fitBounds(bounds);
     }
-  }, [hexes, selectedHex, hoveredHex, onHexClick, armies, characters, populationCentres]);
+  }, [hexes, selectedHex, hoveredHex, onHexClick, armies, characters, populationCentres, t]);
 
   return (
     <div className="relative">

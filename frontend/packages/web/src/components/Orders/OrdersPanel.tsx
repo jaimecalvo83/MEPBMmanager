@@ -154,7 +154,7 @@ function OrderComposer({
       };
       return (
         <div key={f.key}>
-          <label className="block text-sm text-gray-400 mb-1">{label}</label>
+          <label className="block text-sm text-gray-400 mb-1">{label}{f.required ? ' *' : ''}</label>
           <div className="flex flex-wrap gap-2">
             {(f.options ?? []).map((o) => (
               <label key={o.value} className={`px-2 py-1 rounded text-xs cursor-pointer border ${selected.includes(o.value) ? 'bg-mepbm-gold text-gray-900 border-mepbm-gold' : 'bg-gray-700 text-gray-300 border-gray-600'}`}>
@@ -452,6 +452,22 @@ export default function OrdersPanel({ gameId, characters }: OrdersPanelProps) {
           {validateOrders.isLoading ? t('ord.validating') : t('ord.validate')}
         </button>
       </div>
+
+      {validateOrders.isSuccess && (
+        <div className="mb-4 text-sm">
+          {(validateOrders.data as any)?.results?.filter((r: any) => !r.valid).length > 0 ? (
+            <div className="space-y-1">
+              {((validateOrders.data as any).results as any[]).filter((r: any) => !r.valid).map((r: any) => (
+                <p key={r.orderId} className="text-red-400">
+                  {r.characterName} [{r.orderCode}]: {(r.errors as string[]).join('; ')}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-green-400">{t('ord.allValid')}</p>
+          )}
+        </div>
+      )}
 
       {characters.length === 0 && (
         <div className="text-gray-400">{t('ord.none')}</div>

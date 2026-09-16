@@ -23,11 +23,12 @@ public class OrdersController : ControllerBase
 
     [HttpGet]
     [Authorize]
-    public async Task<IActionResult> List(string gameId, [FromQuery] string? nationId = null)
+    public async Task<IActionResult> List(string gameId, [FromQuery] string? nationId = null, [FromQuery] string? lang = null)
     {
+        var lng = NormLang(lang);
         var scope = await ResolveListScope(gameId, nationId);
         if (scope == null)
-            return StatusCode(403, new { error = "Not a player in this game" });
+            return StatusCode(403, new { error = L(lng, "Not a player in this game", "No juegas en esta partida") });
 
         var currentTurn = await _db.Turns
             .Where(t => t.GameId == gameId && t.Status == "orders_open")
@@ -68,7 +69,7 @@ public class OrdersController : ControllerBase
         var lng = NormLang(lang);
         var nationId = await ResolveScopeNation(gameId, request.CharacterId);
         if (nationId == null)
-            return StatusCode(403, new { error = "Not a player in this game" });
+            return StatusCode(403, new { error = L(lng, "Not a player in this game", "No juegas en esta partida") });
 
         var currentTurn = await _db.Turns
             .Where(t => t.GameId == gameId && t.Status == "orders_open")
@@ -135,8 +136,9 @@ public class OrdersController : ControllerBase
 
     [HttpDelete("{orderId}")]
     [Authorize]
-    public async Task<IActionResult> Cancel(string gameId, string orderId)
+    public async Task<IActionResult> Cancel(string gameId, string orderId, [FromQuery] string? lang = null)
     {
+        var lng = NormLang(lang);
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var role = User.FindFirstValue(ClaimTypes.Role);
         var playerNation = await GetPlayerNationId(gameId);
@@ -145,10 +147,10 @@ public class OrdersController : ControllerBase
             .FirstOrDefaultAsync(o => o.Id == orderId && o.GameId == gameId && o.Status == "pending");
 
         if (order == null)
-            return NotFound(new { error = "Order not found or cannot be cancelled" });
+            return NotFound(new { error = L(lng, "Order not found or cannot be cancelled", "Orden no encontrada o no cancelable") });
 
         if (order.NationId != playerNation && !await IsStaff(gameId, userId, role))
-            return StatusCode(403, new { error = "Not a player in this game" });
+            return StatusCode(403, new { error = L(lng, "Not a player in this game", "No juegas en esta partida") });
 
         _db.Orders.Remove(order);
         await _db.SaveChangesAsync();
@@ -163,7 +165,7 @@ public class OrdersController : ControllerBase
         var lng = NormLang(lang);
         var scope = await ResolveListScope(gameId, nationId);
         if (scope == null)
-            return StatusCode(403, new { error = "Not a player in this game" });
+            return StatusCode(403, new { error = L(lng, "Not a player in this game", "No juegas en esta partida") });
 
         var currentTurn = await _db.Turns
             .Where(t => t.GameId == gameId && t.Status == "orders_open")
@@ -210,21 +212,21 @@ public class OrdersController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Eligible(string gameId, [FromQuery] string characterId, [FromQuery] string? lang = null)
     {
+        var lng = NormLang(lang);
         var nationId = await ResolveScopeNation(gameId, characterId);
         if (nationId == null)
-            return StatusCode(403, new { error = "Not a player in this game" });
+            return StatusCode(403, new { error = L(lng, "Not a player in this game", "No juegas en esta partida") });
 
         var ch = await _db.Characters
             .Include(c => c.Spells).Include(c => c.Artifacts)
             .FirstOrDefaultAsync(c => c.Id == characterId && c.NationId == nationId);
-        if (ch == null) return NotFound(new { error = "Character not found" });
+        if (ch == null) return NotFound(new { error = L(lng, "Character not found", "Personaje no encontrado") });
 
         var nation = await _db.Nations
             .Include(n => n.Armies).Include(n => n.Navies).Include(n => n.PopulationCentres)
             .FirstOrDefaultAsync(n => n.Id == nationId);
         var commandsNavy = nation?.Navies.Any(v => v.CommanderId == ch.Id) == true;
 
-        var lng = NormLang(lang);
         var list = OrderDefinitions.Orders.Select(d =>
         {
             var (ok, reason) = CheckEligible(ch, d, nation, commandsNavy, lng);
@@ -313,7 +315,7 @@ public class OrdersController : ControllerBase
         var lng = NormLang(lang);
         var nationId = await ResolveScopeNation(gameId, req.CharacterId);
         if (nationId == null)
-            return StatusCode(403, new { error = "Not a player in this game" });
+            return StatusCode(403, new { error = L(lng, "Not a player in this game", "No juegas en esta partida") });
 
         var ch = await _db.Characters
             .Include(c => c.Spells).Include(c => c.Artifacts)
@@ -362,7 +364,7 @@ public class OrdersController : ControllerBase
         var used = SummarizePendingUsage(pending, nation, game);
         var costs = EstimateCosts(req.Code, ctx, out var maxAmount, out var expectedGold, used);
         if (maxAmount == 0)
-            errors.Add("Insufficient resources or capacity to execute (max 0)");
+            errors.Add(L(lng, "Insufficient resources or capacity to execute (max 0)", "Recursos o capacidad insuficientes (máx 0)"));
         var warnings = new List<string>();
         CrossOrderConflicts(req.Code, ctx, pending, used, errors, warnings);
 

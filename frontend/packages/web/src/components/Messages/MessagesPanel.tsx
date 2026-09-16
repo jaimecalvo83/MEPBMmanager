@@ -7,7 +7,7 @@ interface MessagesPanelProps {
 }
 
 export default function MessagesPanel({ gameId }: MessagesPanelProps) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const { data: messages, isLoading } = useMessages(gameId);
   const sendMessage = useSendMessage(gameId);
   const markRead = useMarkRead(gameId);
@@ -102,7 +102,7 @@ export default function MessagesPanel({ gameId }: MessagesPanelProps) {
                   <h4 className="text-white font-medium">{message.subject}</h4>
                 </div>
                 <span className="text-xs text-gray-500">
-                  {new Date(message.createdAt).toLocaleDateString()}
+                  {new Date(message.createdAt).toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-US')}
                 </span>
               </div>
               <p className="text-gray-400 text-sm mt-1 line-clamp-2">{message.content}</p>

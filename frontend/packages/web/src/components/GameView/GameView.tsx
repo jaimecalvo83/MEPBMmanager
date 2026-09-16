@@ -555,7 +555,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
             <h1 className="text-lg font-bold text-white">{gameState?.game?.name}</h1>
             {currentTurn && (
               <span className="text-sm text-gray-400">
-                {t('game.turnLine', { n: currentTurn.number, s: seasonLabel(currentTurn.season, t), d: new Date(currentTurn.deadline).toLocaleDateString() })}
+                {t('game.turnLine', { n: currentTurn.number, s: seasonLabel(currentTurn.season, t), d: new Date(currentTurn.deadline).toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-US') })}
               </span>
             )}
           </div>
@@ -1050,7 +1050,7 @@ function NationTab({ nation, populationCentres, armies, characters, currentTurn 
     { label: t('nation.cities'), value: populationCentres.length },
     { label: t('nation.armies'), value: armies.length },
     { label: t('nation.characters'), value: characters.length },
-    { label: t('nation.taxRate'), value: `${nation.taxRate ?? ''}%` },
+    { label: t('nation.taxRate'), value: nation.taxRate != null ? `${nation.taxRate}%` : '—' },
     { label: t('nation.vp'), value: nation.victoryPoints ?? 0 },
     { label: t('nation.ws'), value: nation.warshipStrength ?? 0 },
   ];

@@ -217,6 +217,11 @@ setShowCreate(false);
                   {t('common.cancel')}
                 </button>
               </div>
+              {createGame.isError && (
+                <p className="text-red-400 text-sm mt-2">
+                  {((createGame.error as any)?.response?.data?.error || t('dash.createFailed')) as string}
+                </p>
+              )}
             </div>
           </div>
         )}

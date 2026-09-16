@@ -441,7 +441,7 @@ public class CombatResolver
         if (c.Artifacts == null) return 0;
         int best = 0;
         foreach (var a in c.Artifacts)
-            if ((a.Type ?? "").ToLower() == "combat" && a.Bonus > best) best = a.Bonus;
+            if (TurnProcessor.CombatArtifactTypes.Contains(a.Type ?? "") && a.Bonus > best) best = a.Bonus;
         return best;
     }
 

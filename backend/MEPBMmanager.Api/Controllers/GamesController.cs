@@ -1098,16 +1098,17 @@ public class GamesController : ControllerBase
     public async Task<IActionResult> GetTurnReport(string id, string turnId, [FromServices] TurnReportService reportService, [FromQuery] string? lang = null)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var lng = lang == "es" ? "es" : "en";
         var game = await _db.Games.Include(g => g.Players).FirstOrDefaultAsync(g => g.Id == id);
         if (game == null)
-            return NotFound(new { error = "Game not found" });
+            return NotFound(new { error = lng == "es" ? "Partida no encontrada" : "Game not found" });
 
         var player = game.Players.FirstOrDefault(p => p.UserId == userId);
         var nationId = player?.NationId;
 
-        var report = await reportService.GetReportAsync(id, turnId, nationId, lang == "es" ? "es" : "en");
+        var report = await reportService.GetReportAsync(id, turnId, nationId, lng);
         if (report == null)
-            return NotFound(new { error = "Turn not found" });
+            return NotFound(new { error = lng == "es" ? "Turno no encontrado" : "Turn not found" });
 
         return Ok(report);
     }

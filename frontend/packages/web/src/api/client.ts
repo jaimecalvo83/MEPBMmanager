@@ -84,7 +84,7 @@ export const gamesApi = {
 
 export const ordersApi = {
   list: (gameId: string) =>
-    api.get(`/games/${gameId}/orders`),
+    api.get(`/games/${gameId}/orders`, { params: { lang: orderLang() } }),
   submit: (gameId: string, data: { characterId: string; code: number; parameters?: Record<string, unknown>; armyId?: string }) =>
     api.post(`/games/${gameId}/orders?lang=${orderLang()}`, data),
   eligible: (gameId: string, characterId: string) =>
@@ -92,7 +92,7 @@ export const ordersApi = {
   estimate: (gameId: string, data: { characterId: string; code: number; parameters?: Record<string, unknown>; armyId?: string; navyId?: string; afterOrder?: { code: number; parameters?: Record<string, unknown> } }) =>
     api.post(`/games/${gameId}/orders/estimate?lang=${orderLang()}`, data),
   cancel: (gameId: string, orderId: string) =>
-    api.delete(`/games/${gameId}/orders/${orderId}`),
+    api.delete(`/games/${gameId}/orders/${orderId}?lang=${orderLang()}`),
   validate: (gameId: string) =>
     api.post(`/games/${gameId}/orders/validate?lang=${orderLang()}`),
 };
