@@ -211,7 +211,7 @@ setShowCreate(false);
                   }}
                   className="px-6 py-3 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition"
                 >
-                  Cancelar
+                  Cancel
                 </button>
               </div>
             </div>
@@ -286,7 +286,7 @@ setShowCreate(false);
                     }}
                     className="mt-4 w-full px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-500 transition"
                   >
-                    Borrar partida
+                    Delete game
                   </button>
                 )}
               </div>

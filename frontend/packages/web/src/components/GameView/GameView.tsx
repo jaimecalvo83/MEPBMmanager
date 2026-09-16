@@ -743,16 +743,16 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
 // RELATIONS TAB
 // ═══════════════════════════════════════════
 const RELATION_LEVELS = [
-  { value: 2, label: 'Aliado' },
-  { value: 1, label: 'Tolerante' },
+  { value: 2, label: 'Ally' },
+  { value: 1, label: 'Tolerant' },
   { value: 0, label: 'Neutral' },
-  { value: -1, label: 'Hostil' },
-  { value: -2, label: 'Enemigo' },
+  { value: -1, label: 'Hostile' },
+  { value: -2, label: 'Enemy' },
 ];
 
 const ALLEGIANCE_LABELS: Record<string, string> = {
-  free_peoples: 'Pueblos Libres',
-  dark_servants: 'Sirvientes Oscuros',
+  free_peoples: 'Free Peoples',
+  dark_servants: 'Dark Servants',
   neutral: 'Neutral',
 };
 
@@ -792,7 +792,7 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
   );
 
   if (!nationId) {
-    return <div className="text-gray-400">Selecciona una nación para ver sus relaciones.</div>;
+    return <div className="text-gray-400">Select a nation to view its relations.</div>;
   }
 
   const relByTarget = new Map<string, number>();
@@ -802,17 +802,17 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
   return (
     <div className="space-y-4">
       <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 text-sm text-gray-300">
-        Relaciones de <span className="font-bold text-white">{nationName}</span>.
-        Nivel &gt; 0 (tolerante o aliado) permite el paso de tus ejércitos; 0 o menos lo bloquea.
+        Relations of <span className="font-bold text-white">{nationName}</span>.
+        Level &gt; 0 (tolerant or ally) lets your armies pass; 0 or less blocks them.
       </div>
       <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-700 bg-gray-750">
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Nación</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Bando</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Relación</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Cambiar a</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Nation</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Side</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Relation</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Change to</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
@@ -839,7 +839,7 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
                         <option key={l.value} value={l.value}>{l.label} ({l.value})</option>
                       ))}
                     </select>
-                    {savingId === n.id && <span className="ml-2 text-xs text-gray-400">Guardando…</span>}
+                    {savingId === n.id && <span className="ml-2 text-xs text-gray-400">Saving…</span>}
                   </td>
                 </tr>
               );

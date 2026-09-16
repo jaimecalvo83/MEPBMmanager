@@ -84,23 +84,23 @@ export function OrderTipBody({ code, requires }: { code: number; requires?: Orde
   return (
     <span>
       <span className="block text-mepbm-gold font-bold text-sm">[{def.code}] {def.name}</span>
-      <Section title="Tipo">{orderType(code)}</Section>
-      <Section title="Dificultad">{def.difficulty}{def.skillIncrease ? ' · +skill' : ''}</Section>
+      <Section title="Type">{orderType(code)}</Section>
+      <Section title="Difficulty">{def.difficulty}{def.skillIncrease ? ' · +skill' : ''}</Section>
       {prereqs.length > 0 && (
-        <Section title="Prerequisitos">
+        <Section title="Prerequisites">
           {prereqs.map((p) => (
             <span key={p} className="block text-xs">• {p}</span>
           ))}
         </Section>
       )}
       {requires && requires.length > 0 && (
-        <Section title="Info requerida">
+        <Section title="Required information">
           {requires.map((f) => (
             <span key={f.key} className="block text-xs">• {f.label}{f.required ? ' *' : ''}</span>
           ))}
         </Section>
       )}
-      <Section title="Descripción">
+      <Section title="Description">
         {def.description}
         {schema?.help && <span className="block text-xs text-gray-400 italic mt-1">{schema.help}</span>}
       </Section>

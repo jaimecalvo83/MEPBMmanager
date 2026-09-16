@@ -122,7 +122,7 @@ function OrderComposer({
               className="flex-1 p-2 bg-gray-700 rounded border border-gray-600"
             />
             {f.key === 'amount' && estimate.data?.maxAmount != null && (
-              <button onClick={applyMax} className="px-3 py-1 bg-gray-600 text-xs rounded hover:bg-gray-500" title="Usar máximo posible">
+              <button onClick={applyMax} className="px-3 py-1 bg-gray-600 text-xs rounded hover:bg-gray-500" title="Use maximum possible">
                 max {estimate.data.maxAmount}
               </button>
             )}
