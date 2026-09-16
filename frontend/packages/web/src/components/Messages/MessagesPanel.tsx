@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useMessages, useSendMessage, useMarkRead } from '../../hooks/useMessages';
+import { useLang } from '../../i18n/lang';
 
 interface MessagesPanelProps {
   gameId: string;
 }
 
 export default function MessagesPanel({ gameId }: MessagesPanelProps) {
+  const { t } = useLang();
   const { data: messages, isLoading } = useMessages(gameId);
   const sendMessage = useSendMessage(gameId);
   const markRead = useMarkRead(gameId);
@@ -26,18 +28,18 @@ export default function MessagesPanel({ gameId }: MessagesPanelProps) {
   };
 
   if (isLoading) {
-    return <div className="text-gray-400 p-4">Loading messages...</div>;
+    return <div className="text-gray-400 p-4">{t('msg.loading')}</div>;
   }
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold text-mepbm-gold">Messages</h2>
+        <h2 className="text-lg font-bold text-mepbm-gold">{t('msg.title')}</h2>
         <button
           onClick={() => setShowCompose(!showCompose)}
           className="px-3 py-1 bg-mepbm-gold text-gray-900 text-sm font-bold rounded hover:bg-yellow-400 transition"
         >
-          Compose
+          {t('msg.compose')}
         </button>
       </div>
 
@@ -45,13 +47,13 @@ export default function MessagesPanel({ gameId }: MessagesPanelProps) {
         <div className="mb-4 bg-gray-700 p-4 rounded-lg space-y-3">
           <input
             type="text"
-            placeholder="Subject"
+            placeholder={t('msg.subject')}
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             className="w-full p-2 bg-gray-600 rounded border border-gray-500"
           />
           <textarea
-            placeholder="Message content..."
+            placeholder={t('msg.contentPh')}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={4}
@@ -63,13 +65,13 @@ export default function MessagesPanel({ gameId }: MessagesPanelProps) {
               disabled={sendMessage.isLoading || !subject.trim() || !content.trim()}
               className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-500 transition disabled:opacity-50"
             >
-              {sendMessage.isLoading ? 'Sending...' : 'Send'}
+              {sendMessage.isLoading ? t('msg.sending') : t('msg.send')}
             </button>
             <button
               onClick={() => setShowCompose(false)}
               className="px-4 py-2 bg-gray-600 text-gray-300 text-sm rounded hover:bg-gray-500 transition"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -77,7 +79,7 @@ export default function MessagesPanel({ gameId }: MessagesPanelProps) {
 
       <div className="space-y-2 max-h-96 overflow-y-auto">
         {(!messages || messages.length === 0) ? (
-          <p className="text-gray-500 text-sm text-center py-4">No messages yet</p>
+          <p className="text-gray-500 text-sm text-center py-4">{t('msg.none')}</p>
         ) : (
           messages.map((message) => (
             <div

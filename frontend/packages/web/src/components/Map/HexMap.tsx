@@ -8,6 +8,7 @@ import {
   MAP2950_FORD_SIDES,
   MAP2950_BRIDGE_SIDES,
 } from '@MEPBMmanager/shared';
+import { useLang } from '../../i18n/lang';
 
 interface HexTile {
   q: number;
@@ -111,6 +112,7 @@ function getHexCorners(cx: number, cy: number): [number, number][] {
 }
 
 export default function HexMap({ hexes, armies = [], characters = [], populationCentres = [], onHexClick, selectedHex }: HexMapProps) {
+  const { t } = useLang();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const [hoveredHex, setHoveredHex] = useState<{ q: number; r: number } | null>(null);
@@ -425,7 +427,7 @@ export default function HexMap({ hexes, armies = [], characters = [], population
     <div className="relative">
       <div ref={mapRef} className="w-full h-[600px] bg-gray-900 rounded-lg border border-gray-700" />
       <div className="absolute bottom-4 left-4 bg-gray-800 p-3 rounded-lg border border-gray-700 text-xs space-y-1">
-        <p className="font-bold text-mepbm-gold mb-2">Terrain</p>
+        <p className="font-bold text-mepbm-gold mb-2">{t('map.terrain')}</p>
         {Object.entries(TERRAIN_COLORS).map(([terrain, color]) => (
           <div key={terrain} className="flex items-center gap-2">
             <div className="w-4 h-4 rounded" style={{ backgroundColor: color }} />
@@ -433,25 +435,25 @@ export default function HexMap({ hexes, armies = [], characters = [], population
           </div>
         ))}
         <div className="border-t border-gray-700 my-2 pt-2 space-y-1">
-          <p className="font-bold text-mepbm-gold">Features</p>
-          <div className="flex items-center gap-2"><span style={{ color: '#1E5CFF' }}>━━</span><span>Major river</span></div>
-          <div className="flex items-center gap-2"><span style={{ color: '#4DA6FF' }}>──</span><span>Minor river</span></div>
-          <div className="flex items-center gap-2"><span style={{ color: '#9AA0A6' }}>──</span><span>Road</span></div>
-          <div className="flex items-center gap-2"><span className="text-gray-400">▪</span><span>Ford</span></div>
-          <div className="flex items-center gap-2"><span className="text-black bg-white px-0.5 rounded">▬</span><span>Bridge</span></div>
+          <p className="font-bold text-mepbm-gold">{t('map.features')}</p>
+          <div className="flex items-center gap-2"><span style={{ color: '#1E5CFF' }}>━━</span><span>{t('map.majorRiver')}</span></div>
+          <div className="flex items-center gap-2"><span style={{ color: '#4DA6FF' }}>──</span><span>{t('map.minorRiver')}</span></div>
+          <div className="flex items-center gap-2"><span style={{ color: '#9AA0A6' }}>──</span><span>{t('map.road')}</span></div>
+          <div className="flex items-center gap-2"><span className="text-gray-400">▪</span><span>{t('map.ford')}</span></div>
+          <div className="flex items-center gap-2"><span className="text-black bg-white px-0.5 rounded">▬</span><span>{t('map.bridge')}</span></div>
         </div>
         <div className="border-t border-gray-700 my-2 pt-2 space-y-1">
-          <p className="font-bold text-mepbm-gold">Units</p>
-          <div className="flex items-center gap-2"><span className="text-yellow-400">★</span><span>Capital</span></div>
-          <div className="flex items-center gap-2"><span className="text-gray-300">▢</span><span>Town</span></div>
-          <div className="flex items-center gap-2"><span className="text-red-400">⚔</span><span>Army</span></div>
-          <div className="flex items-center gap-2"><span className="text-white">●</span><span>Character</span></div>
-          <div className="flex items-center gap-2"><span className="text-gray-300">◆</span><span>Loose chars</span></div>
+          <p className="font-bold text-mepbm-gold">{t('map.units')}</p>
+          <div className="flex items-center gap-2"><span className="text-yellow-400">★</span><span>{t('map.capital')}</span></div>
+          <div className="flex items-center gap-2"><span className="text-gray-300">▢</span><span>{t('map.town')}</span></div>
+          <div className="flex items-center gap-2"><span className="text-red-400">⚔</span><span>{t('map.army')}</span></div>
+          <div className="flex items-center gap-2"><span className="text-white">●</span><span>{t('map.character')}</span></div>
+          <div className="flex items-center gap-2"><span className="text-gray-300">◆</span><span>{t('map.loose')}</span></div>
         </div>
       </div>
       {hoveredHex && (
         <div className="absolute top-4 right-4 bg-gray-800 px-3 py-2 rounded-lg border border-gray-700 text-sm">
-          Hex: {hoveredHex.q}, {hoveredHex.r}
+          {t('map.hex', { q: hoveredHex.q, r: hoveredHex.r })}
         </div>
       )}
     </div>

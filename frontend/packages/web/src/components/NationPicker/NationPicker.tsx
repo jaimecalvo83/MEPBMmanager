@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNations } from '../../hooks/useNations';
 import { useQueryClient } from 'react-query';
 import { gamesApi } from '../../api/client';
+import { useLang } from '../../i18n/lang';
 
 interface NationPickerProps {
   gameId: string;
@@ -11,6 +12,7 @@ interface NationPickerProps {
 }
 
 const NationPicker: React.FC<NationPickerProps> = ({ gameId, mode = 'join', onClose, onJoined }) => {
+  const { t } = useLang();
   const { data: nations, isLoading } = useNations(gameId);
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<string | null>(null);
@@ -33,7 +35,7 @@ const NationPicker: React.FC<NationPickerProps> = ({ gameId, mode = 'join', onCl
       onJoined();
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { error?: string } } };
-      setError(axiosError.response?.data?.error || 'Failed to join game');
+      setError(axiosError.response?.data?.error || t('picker.failed'));
       setJoining(false);
     }
   };
@@ -43,7 +45,7 @@ const NationPicker: React.FC<NationPickerProps> = ({ gameId, mode = 'join', onCl
       <div className="bg-gray-800 rounded-lg p-6 w-full max-w-lg border border-gray-700">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-mepbm-gold">
-            {mode === 'update' ? 'Select Your Nation' : 'Choose Your Nation'}
+            {mode === 'update' ? t('picker.selectNation') : t('picker.chooseNation')}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">
             &times;
@@ -51,11 +53,11 @@ const NationPicker: React.FC<NationPickerProps> = ({ gameId, mode = 'join', onCl
         </div>
 
         {isLoading ? (
-          <div className="text-center text-gray-400 py-8">Loading nations...</div>
+          <div className="text-center text-gray-400 py-8">{t('picker.loading')}</div>
         ) : (
           <div className="max-h-80 overflow-y-auto space-y-2 mb-4">
             {available.length === 0 ? (
-              <p className="text-gray-400 text-center py-6">No nations available</p>
+              <p className="text-gray-400 text-center py-6">{t('picker.none')}</p>
             ) : (
               available.map((nation) => (
                 <button
@@ -91,13 +93,13 @@ const NationPicker: React.FC<NationPickerProps> = ({ gameId, mode = 'join', onCl
             disabled={!selected || joining}
             className="flex-1 px-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-500 transition disabled:opacity-50"
           >
-            {joining ? 'Joining...' : mode === 'update' ? 'Select Nation' : 'Join Game'}
+            {joining ? t('picker.joining') : mode === 'update' ? t('picker.selectBtn') : t('picker.joinBtn')}
           </button>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
       </div>

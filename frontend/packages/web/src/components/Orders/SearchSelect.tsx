@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useLang } from '../../i18n/lang';
 
 export interface SearchOption {
   value: string;
@@ -17,6 +18,7 @@ export default function SearchSelect({
   onChange: (value: string) => void;
   placeholder?: string;
 }) {
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [tip, setTip] = useState<{ x: number; y: number; node: ReactNode } | null>(null);
@@ -61,14 +63,14 @@ export default function SearchSelect({
             className="flex-1 p-2 bg-gray-700 rounded border border-gray-600 text-left truncate"
           >
             <span className={selected ? 'text-gray-100' : 'text-gray-500'}>
-              {selected ? selected.label : placeholder ?? 'Select…'}
+              {selected ? selected.label : placeholder ?? t('ord.selectPh')}
             </span>
           </button>
           {selected && (
             <button
               type="button"
               onClick={() => pick('')}
-              title="Clear"
+              title={t('ord.clearTitle')}
               className="px-2 bg-gray-700 rounded border border-gray-600 text-gray-400 hover:text-white"
             >
               ×
@@ -84,7 +86,7 @@ export default function SearchSelect({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && filtered.length > 0) pick(filtered[0].value);
             }}
-            placeholder={placeholder ?? 'Type to search…'}
+            placeholder={placeholder ?? t('ord.searchPh')}
             className="w-full p-2 bg-gray-700 rounded border border-mepbm-gold focus:outline-none"
           />
           <div
@@ -92,7 +94,7 @@ export default function SearchSelect({
             onScroll={() => setTip(null)}
           >
             {filtered.length === 0 && (
-              <div className="px-3 py-2 text-sm text-gray-500">No matches</div>
+              <div className="px-3 py-2 text-sm text-gray-500">{t('ord.noMatches')}</div>
             )}
             {filtered.map((o) => (
               <button

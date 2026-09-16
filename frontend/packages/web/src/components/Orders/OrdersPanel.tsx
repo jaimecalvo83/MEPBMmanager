@@ -5,6 +5,7 @@ import { ORDER_SCHEMAS } from './orderSchemas';
 import { OrderDropdownTip, OrderInfoTip } from './OrderInfoTip';
 import SearchSelect from './SearchSelect';
 import { useQueryClient } from 'react-query';
+import { useLang } from '../../i18n/lang';
 
 interface Character {
   id: string;
@@ -54,6 +55,7 @@ function OrderComposer({
   slotLabel: string;
   onSubmitted: () => void;
 }) {
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const submitOrder = useSubmitOrder(gameId);
   const [orderCode, setOrderCode] = useState<number>(0);
@@ -62,7 +64,7 @@ function OrderComposer({
   const { data: eligible, isError: eligError, error: eligErrDetail } = useEligibleOrders(gameId, character.id);
   const eligibleSet = useMemo(() => new Set((eligible ?? []).filter((e) => e.ok).map((e) => e.code)), [eligible]);
   const eligErrorMsg = eligError
-    ? ((eligErrDetail as any)?.response?.data?.error || 'Could not load eligible orders')
+    ? ((eligErrDetail as any)?.response?.data?.error || t('ord.eligFail'))
     : null;
   const availableOrders = useMemo(
     () => ORDER_DEFINITIONS.filter((o) => eligibleSet.has(o.code)).sort((a, b) => a.code - b.code),
@@ -122,8 +124,8 @@ function OrderComposer({
               className="flex-1 p-2 bg-gray-700 rounded border border-gray-600"
             />
             {f.key === 'amount' && estimate.data?.maxAmount != null && (
-              <button onClick={applyMax} className="px-3 py-1 bg-gray-600 text-xs rounded hover:bg-gray-500" title="Use maximum possible">
-                max {estimate.data.maxAmount}
+              <button onClick={applyMax} className="px-3 py-1 bg-gray-600 text-xs rounded hover:bg-gray-500" title={t('ord.maxTitle')}>
+                {t('ord.maxBtn', { x: estimate.data.maxAmount })}
               </button>
             )}
           </div>
@@ -139,7 +141,7 @@ function OrderComposer({
             value={typeof value === 'string' ? value : ''}
             options={(f.options ?? []).map((o) => ({ value: o.value, label: o.label }))}
             onChange={(v) => setParam(f.key, v || undefined)}
-            placeholder="Select…"
+            placeholder={t('ord.selectPh')}
           />
           {override?.help && <p className="text-xs text-gray-500 mt-1">{override.help}</p>}
         </div>
@@ -216,7 +218,7 @@ function OrderComposer({
     <div className="bg-gray-900 rounded p-3 border border-gray-700 space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-bold text-gray-300">{slotLabel}</span>
-        {eligible && <span className="text-xs text-gray-500">{availableOrders.length} available</span>}
+        {eligible && <span className="text-xs text-gray-500">{t('ord.available', { n: availableOrders.length })}</span>}
       </div>
       {eligErrorMsg && (
         <p className="text-red-400 text-sm">{eligErrorMsg}</p>
@@ -232,7 +234,7 @@ function OrderComposer({
           setOrderCode(v === '' ? 0 : parseInt(v, 10));
           setParams({});
         }}
-        placeholder="Select order…"
+        placeholder={t('ord.selectOrder')}
       />
       {orderCode > 0 && (
         <div className="text-sm">
@@ -244,7 +246,7 @@ function OrderComposer({
       )}
 
       {orderCode > 0 && estimate.isLoading && (
-        <p className="text-gray-500 text-sm">Loading order info…</p>
+        <p className="text-gray-500 text-sm">{t('ord.loading')}</p>
       )}
 
       {orderCode > 0 && est && (
@@ -252,14 +254,14 @@ function OrderComposer({
           {est.requires.map(renderField)}
           {(costEntries.length > 0 || est.expectedGold != null) && (
             <div className="text-sm bg-gray-800 rounded p-2 border border-gray-700">
-              <span className="text-gray-400">Cost: </span>
+              <span className="text-gray-400">{t('ord.cost')}</span>
               {costEntries.map(([k, v]) => (
                 <span key={k} className="mr-3 text-yellow-300">{k}: {v}</span>
               ))}
               {est.expectedGold != null && (
-                <span className="mr-3 text-green-400">expected +{est.expectedGold} gold</span>
+                <span className="mr-3 text-green-400">{t('ord.expected', { x: est.expectedGold })}</span>
               )}
-              {est.maxAmount != null && <span className="text-gray-500">(max {est.maxAmount})</span>}
+              {est.maxAmount != null && <span className="text-gray-500">{t('ord.max', { x: est.maxAmount })}</span>}
             </div>
           )}
           {est.warnings && est.warnings.length > 0 && (
@@ -281,14 +283,14 @@ function OrderComposer({
           disabled={!orderCode || submitOrder.isLoading || (est != null && !est.ok)}
           className="px-4 py-2 bg-mepbm-gold text-gray-900 font-bold rounded hover:bg-yellow-400 transition disabled:opacity-50"
         >
-          {submitOrder.isLoading ? 'Submitting…' : `Submit ${slotLabel}`}
+          {submitOrder.isLoading ? t('ord.submitting') : t('ord.submit', { slot: slotLabel })}
         </button>
         {est?.movedByFirstOrder && est.effectiveLocation && (
-          <span className="ml-3 text-xs text-blue-300">After 1st order → {est.effectiveLocation}</span>
+          <span className="ml-3 text-xs text-blue-300">{t('ord.moved', { x: est.effectiveLocation })}</span>
         )}
       </div>
       {submitOrder.isError && (
-        <p className="text-red-400 text-sm">{(submitOrder.error as any)?.response?.data?.error || 'Failed to submit order'}</p>
+        <p className="text-red-400 text-sm">{(submitOrder.error as any)?.response?.data?.error || t('ord.submitFail')}</p>
       )}
     </div>
   );
@@ -305,6 +307,7 @@ function CharacterOrderCard({
   pending: Array<{ id: string; code: number; parameters: unknown; status: string }>;
   onChanged: () => void;
 }) {
+  const { t } = useLang();
   const queryClient = useQueryClient();
 
   const afterOrder = pending.length === 1
@@ -320,14 +323,14 @@ function CharacterOrderCard({
             ({character.type}) C:{character.commandSkill} A:{character.agentSkill} E:{character.emissarySkill} M:{character.mageSkill} @ {character.locationHex}
           </span>
         </div>
-        <span className="text-xs text-gray-500">{pending.length}/2 orders</span>
+        <span className="text-xs text-gray-500">{t('ord.ordersCount', { n: pending.length })}</span>
       </div>
 
       {pending.length === 0 && (
         <OrderComposer
           gameId={gameId}
           character={character}
-          slotLabel="1st order"
+          slotLabel={t('ord.slot1')}
           onSubmitted={onChanged}
         />
       )}
@@ -355,19 +358,19 @@ function CharacterOrderCard({
           gameId={gameId}
           character={character}
           afterOrder={afterOrder}
-          slotLabel="2nd order (conditioned by the 1st)"
+          slotLabel={t('ord.slot2')}
           onSubmitted={onChanged}
         />
       )}
 
       {pending.length >= 2 && (
-        <p className="text-yellow-400 text-sm">Two orders submitted. Cancel one to change it.</p>
+        <p className="text-yellow-400 text-sm">{t('ord.twoSubmitted')}</p>
       )}
     </div>
   );
 }
 
-function humanParamValue(f: OrderFieldSpec, v: unknown): string {
+function humanParamValue(f: OrderFieldSpec, v: unknown, t: (key: 'ord.yes' | 'ord.no') => string): string {
   if (f.kind === 'select') {
     const o = (f.options ?? []).find((o) => o.value === String(v));
     return o ? o.label : String(v);
@@ -375,17 +378,17 @@ function humanParamValue(f: OrderFieldSpec, v: unknown): string {
   if (f.kind === 'multiselect' && Array.isArray(v)) {
     return v.map((x) => (f.options ?? []).find((o) => o.value === String(x))?.label ?? String(x)).join(', ');
   }
-  if (typeof v === 'boolean') return v ? 'yes' : 'no';
+  if (typeof v === 'boolean') return v ? t('ord.yes') : t('ord.no');
   return String(v);
 }
 
-function describeParams(stored: Record<string, unknown>, requires?: OrderFieldSpec[] | null): string {
+function describeParams(stored: Record<string, unknown>, requires: OrderFieldSpec[] | null | undefined, t: (key: 'ord.yes' | 'ord.no') => string): string {
   if (!requires) return JSON.stringify(stored);
   const parts: string[] = [];
   for (const f of requires) {
     const v = stored[f.key];
     if (v === undefined || v === null || v === '') continue;
-    parts.push(`${f.label}: ${humanParamValue(f, v)}`);
+    parts.push(`${f.label}: ${humanParamValue(f, v, t)}`);
   }
   return parts.length > 0 ? parts.join(' · ') : JSON.stringify(stored);
 }
@@ -397,6 +400,7 @@ function PendingOrderLine({ gameId, characterId, order, index, onChanged }: {
   index: number;
   onChanged: () => void;
 }) {
+  const { t } = useLang();
   const cancelOrder = useCancelOrder(gameId);
   const stored = parseParams(order.parameters);
   const paramsKey = JSON.stringify(stored);
@@ -404,13 +408,13 @@ function PendingOrderLine({ gameId, characterId, order, index, onChanged }: {
   return (
     <div className="flex items-center justify-between bg-gray-700 px-3 py-2 rounded text-sm">
       <span>
-        <span className="text-gray-400">{index === 0 ? '1st' : '2nd'}: </span>
+        <span className="text-gray-400">{index === 0 ? t('ord.ord1') : t('ord.ord2')} </span>
         <OrderInfoTip
           code={order.code}
           requires={est.data?.requires}
         />
         {' '}
-        <span className="text-gray-400">{describeParams(stored, est.data?.requires)}</span>
+        <span className="text-gray-400">{describeParams(stored, est.data?.requires, t)}</span>
         {order.status !== 'pending' && <span className="ml-2 text-xs text-gray-500">({order.status})</span>}
       </span>
       {order.status === 'pending' && (
@@ -422,7 +426,7 @@ function PendingOrderLine({ gameId, characterId, order, index, onChanged }: {
           disabled={cancelOrder.isLoading}
           className="text-red-400 hover:text-red-300 text-xs disabled:opacity-50"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
       )}
     </div>
@@ -430,6 +434,7 @@ function PendingOrderLine({ gameId, characterId, order, index, onChanged }: {
 }
 
 export default function OrdersPanel({ gameId, characters }: OrdersPanelProps) {
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const { data: orders } = useOrders(gameId);
   const validateOrders = useValidateOrders(gameId);
@@ -438,18 +443,18 @@ export default function OrdersPanel({ gameId, characters }: OrdersPanelProps) {
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-mepbm-gold">Orders</h2>
+        <h2 className="text-lg font-bold text-mepbm-gold">{t('ord.title')}</h2>
         <button
           onClick={() => validateOrders.mutate()}
           disabled={validateOrders.isLoading}
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition disabled:opacity-50"
         >
-          {validateOrders.isLoading ? 'Validating…' : 'Validate All'}
+          {validateOrders.isLoading ? t('ord.validating') : t('ord.validate')}
         </button>
       </div>
 
       {characters.length === 0 && (
-        <div className="text-gray-400">No characters visible.</div>
+        <div className="text-gray-400">{t('ord.none')}</div>
       )}
 
       <div className="space-y-4">

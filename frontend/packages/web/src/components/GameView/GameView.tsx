@@ -9,6 +9,7 @@ import OrdersPanel from '../Orders/OrdersPanel';
 import MessagesPanel from '../Messages/MessagesPanel';
 import NationPicker from '../NationPicker/NationPicker';
 import { SPELL_DEFINITIONS } from '@MEPBMmanager/shared';
+import { useLang, LanguageSwitcher, type TFunc } from '../../i18n/lang';
 
 interface PlayerInfo {
   id: string;
@@ -32,6 +33,7 @@ interface AdminInfo {
 type TabType = 'nation' | 'map' | 'cities' | 'armies' | 'characters' | 'orders' | 'messages' | 'relations' | 'reports' | 'standings';
 
 export default function GameView() {
+  const { t } = useLang();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -136,7 +138,7 @@ export default function GameView() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-gray-400 text-lg">Loading game...</div>
+        <div className="text-gray-400 text-lg">{t('setup.loading')}</div>
       </div>
     );
   }
@@ -196,6 +198,7 @@ function SetupView({
   newPlayerIsAdmin, setNewPlayerIsAdmin,
   acceptMutation, addPlayerMutation, removePlayerMutation, startGameMutation, acceptAdminMutation, navigate
 }: any) {
+  const { t } = useLang();
   const currentPlayer = playersData?.players?.find((p: PlayerInfo) => p.userId === currentUserId);
   const hasAccepted = currentPlayer?.isReady === true;
   const isPlayer = !!currentPlayer;
@@ -223,9 +226,9 @@ function SetupView({
   const getRole = (playerUserId: string): string => {
     const isAdmin = adminUserIds.has(playerUserId);
     const isP = playerUserIds.has(playerUserId);
-    if (isAdmin && isP) return 'Player + Admin';
-    if (isAdmin) return 'Admin';
-    return 'Player';
+    if (isAdmin && isP) return t('setup.roleBoth');
+    if (isAdmin) return t('setup.roleAdmin');
+    return t('setup.rolePlayer');
   };
 
   const pendingAdmins = adminsData?.admins?.filter((a: AdminInfo) => !a.isReady) || [];
@@ -240,23 +243,22 @@ function SetupView({
   return (
     <div className="min-h-screen bg-gray-900">
       <div className="p-6">
-        <h2 className="text-xl font-bold text-mepbm-gold mb-2">Game: {gameState?.game?.name}</h2>
-        <p className="text-gray-400 mb-4">Status: {gameState.game.status} | Waiting for players...</p>
+        <h2 className="text-xl font-bold text-mepbm-gold mb-2">{t('setup.gameTitle')}{gameState?.game?.name}</h2>
+        <p className="text-gray-400 mb-4">{t('setup.statusWaiting', { s: gameState.game.status })}</p>
 
         {isGameAdmin && (
           <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-blue-600">
-            <h3 className="text-lg font-semibold text-white mb-2">Game Setup</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">{t('setup.title')}</h3>
             <p className="text-gray-400 mb-3 text-sm">
-              {pendingAdmins.length > 0 && `${pendingAdmins.length} admin(s) pending. `}
-              {pendingPlayers.length > 0 && `${pendingPlayers.length} player(s) pending. `}
-              {pendingAdmins.length === 0 && pendingPlayers.length === 0 && allParticipants.length >= 1 && 'All confirmed! '}
-              {allParticipants.length < 1 && 'Need at least 1 participant. '}
-              {canStart ? 'Ready to start!' : 'Not ready yet.'}
+              {pendingAdmins.length > 0 && t('setup.adminsPending', { n: pendingAdmins.length })}
+              {pendingPlayers.length > 0 && t('setup.playersPending', { n: pendingPlayers.length })}
+              {pendingAdmins.length === 0 && pendingPlayers.length === 0 && allParticipants.length >= 1 && t('setup.allConfirmed')}
+              {allParticipants.length < 1 && t('setup.needOne')}
+              {canStart ? t('setup.ready') : t('setup.notReady')}
             </p>
             {gameState?.game?.gameTypeCode === '2950' && (
               <p className="text-gray-400 mb-3 text-sm">
-                2950 brackets (free + dark + neutral): 6-10 → 4+4+2 · 11-15 → 6+6+3 · 16-20 → 8+8+4 · 21-25 → 10+10+5.
-                Surplus nations play as NPCs (max 4, neutrals first) on a cropped map and can join later.
+                {t('setup.brackets')}
               </p>
             )}
             <button
@@ -264,11 +266,11 @@ function SetupView({
               disabled={!canStart || startGameMutation.isLoading}
               className="px-6 py-3 bg-blue-600 text-white font-bold rounded hover:bg-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {startGameMutation.isLoading ? 'Starting...' : 'Start Game'}
+              {startGameMutation.isLoading ? t('setup.starting') : t('setup.start')}
             </button>
             {startGameMutation.isError && (
               <p className="text-red-400 text-sm mt-2">
-                {(startGameMutation.error as any)?.response?.data?.error || 'Failed to start game'}
+                {(startGameMutation.error as any)?.response?.data?.error || t('setup.startFailed')}
               </p>
             )}
           </div>
@@ -276,7 +278,7 @@ function SetupView({
 
         {isGameAdmin && (
           <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-gray-600">
-            <h3 className="text-lg font-semibold text-white mb-3">Add Player</h3>
+            <h3 className="text-lg font-semibold text-white mb-3">{t('setup.addPlayer')}</h3>
             <div className="flex gap-3 items-end">
               <div className="flex-1">
                 <input
@@ -288,37 +290,37 @@ function SetupView({
                   onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer()}
                 />
               </div>
-              <label className="flex items-center gap-2 text-sm text-gray-400 whitespace-nowrap">
-                <input type="checkbox" checked={newPlayerIsAdmin}
-                  onChange={(e) => setNewPlayerIsAdmin(e.target.checked)} className="rounded" />
-                Admin
-              </label>
-              <button
-                onClick={handleAddPlayer}
-                disabled={!newPlayerEmail.trim() || addPlayerMutation.isLoading}
-                className="px-6 py-3 bg-green-600 text-white font-bold rounded hover:bg-green-500 transition disabled:opacity-50"
-              >
-                {addPlayerMutation.isLoading ? 'Adding...' : 'Add'}
-              </button>
-            </div>
-            {addPlayerMutation.isError && (
-              <p className="text-red-400 text-sm mt-2">
-                {(addPlayerMutation.error as any)?.response?.data?.error || 'Failed to add player'}
-              </p>
-            )}
+                <label className="flex items-center gap-2 text-sm text-gray-400 whitespace-nowrap">
+                  <input type="checkbox" checked={newPlayerIsAdmin}
+                    onChange={(e) => setNewPlayerIsAdmin(e.target.checked)} className="rounded" />
+                  {t('dash.admin')}
+                </label>
+                <button
+                  onClick={handleAddPlayer}
+                  disabled={!newPlayerEmail.trim() || addPlayerMutation.isLoading}
+                  className="px-6 py-3 bg-green-600 text-white font-bold rounded hover:bg-green-500 transition disabled:opacity-50"
+                >
+                  {addPlayerMutation.isLoading ? t('dash.adding') : t('common.add')}
+                </button>
+              </div>
+              {addPlayerMutation.isError && (
+                <p className="text-red-400 text-sm mt-2">
+                  {(addPlayerMutation.error as any)?.response?.data?.error || t('setup.addFailed')}
+                </p>
+              )}
           </div>
         )}
 
         {isPlayer && !hasAccepted && (
           <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-yellow-600">
-            <h3 className="text-lg font-semibold text-yellow-400 mb-3">You are invited to this game</h3>
-            <p className="text-gray-400 mb-3">Choose a player you want to play with (optional):</p>
+            <h3 className="text-lg font-semibold text-yellow-400 mb-3">{t('setup.invited')}</h3>
+            <p className="text-gray-400 mb-3">{t('setup.chooseWith')}</p>
             <select
               value={wantsToPlayWithId}
               onChange={(e) => setWantsToPlayWithId(e.target.value)}
               className="w-full p-3 bg-gray-700 rounded border border-gray-600 focus:border-mepbm-gold focus:outline-none mb-4"
             >
-              <option value="">No preference</option>
+              <option value="">{t('setup.noPref')}</option>
               {otherPlayers.map((p: PlayerInfo) => (
                 <option key={p.userId} value={p.userId}>{p.username} ({p.email})</option>
               ))}
@@ -328,34 +330,34 @@ function SetupView({
               disabled={acceptMutation.isLoading}
               className="px-6 py-3 bg-green-600 text-white font-bold rounded hover:bg-green-500 transition disabled:opacity-50"
             >
-              {acceptMutation.isLoading ? 'Confirming...' : 'Confirm Attendance'}
+              {acceptMutation.isLoading ? t('setup.confirming') : t('setup.confirmAtt')}
             </button>
           </div>
         )}
 
         {isPlayer && hasAccepted && (
           <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-green-600">
-            <p className="text-green-400 font-semibold">You have confirmed your attendance</p>
+            <p className="text-green-400 font-semibold">{t('setup.confirmedAtt')}</p>
             {currentPlayer?.wantsToPlayWith && (
-              <p className="text-gray-400 mt-1">Playing with: {currentPlayer.wantsToPlayWith.username}</p>
+              <p className="text-gray-400 mt-1">{t('setup.playingWith', { x: currentPlayer.wantsToPlayWith.username })}</p>
             )}
           </div>
         )}
 
         {needsAdminAccept && (
           <div className="bg-gray-800 rounded-lg p-4 mb-6 border border-purple-600">
-            <h3 className="text-lg font-semibold text-purple-300 mb-2">You are invited as game admin</h3>
-            <p className="text-gray-400 mb-3 text-sm">Accept the admin role so the game can be started. Nations are assigned when the game starts.</p>
+            <h3 className="text-lg font-semibold text-purple-300 mb-2">{t('setup.invitedAdmin')}</h3>
+            <p className="text-gray-400 mb-3 text-sm">{t('setup.adminMsg')}</p>
             <button
               onClick={() => acceptAdminMutation.mutate()}
               disabled={acceptAdminMutation.isLoading}
               className="px-6 py-3 bg-purple-600 text-white font-bold rounded hover:bg-purple-500 transition disabled:opacity-50"
             >
-              {acceptAdminMutation.isLoading ? 'Accepting...' : 'Accept Admin Role'}
+              {acceptAdminMutation.isLoading ? t('setup.accepting') : t('setup.acceptAdmin')}
             </button>
             {acceptAdminMutation.isError && (
               <p className="text-red-400 text-sm mt-2">
-                {(acceptAdminMutation.error as any)?.response?.data?.error || 'Failed to accept admin role'}
+                {(acceptAdminMutation.error as any)?.response?.data?.error || t('setup.acceptFailed')}
               </p>
             )}
           </div>
@@ -363,18 +365,18 @@ function SetupView({
 
         <div className="bg-gray-800 rounded-lg p-4 mb-6">
           <h3 className="text-lg font-semibold text-white mb-2">
-            Participants ({confirmedParticipants.length} confirmed / {visibleParticipants.length} total)
+            {t('setup.participants', { c: confirmedParticipants.length, t: visibleParticipants.length })}
           </h3>
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-700">
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Role</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('setup.thName')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('setup.thRole')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('setup.thStatus')}</th>
                 {shouldSeeAll && (
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Playing With</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('setup.thPlayingWith')}</th>
                 )}
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('setup.thActions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700">
@@ -395,7 +397,7 @@ function SetupView({
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-1 rounded ${participant.isReady ? 'bg-green-600 text-white' : 'bg-yellow-600 text-white'}`}>
-                        {participant.isReady ? 'Confirmed' : 'Pending'}
+                        {participant.isReady ? t('setup.confirmed') : t('setup.pending')}
                       </span>
                     </td>
                     {shouldSeeAll && (
@@ -407,11 +409,11 @@ function SetupView({
                       {!participant.isReady && isGameAdmin && (
                         <button
                           onClick={() => {
-                            if (confirm(`Remove ${participant.username || participant.email}?`))
+                            if (confirm(t('setup.confirmRemove', { x: participant.username || participant.email })))
                               removePlayerMutation.mutate(participant.id);
-                          }}
+                           }}
                           className="text-red-400 hover:text-red-300 text-xs font-semibold"
-                        >Remove</button>
+                        >{t('common.remove')}</button>
                       )}
                     </td>
                   </tr>
@@ -423,7 +425,7 @@ function SetupView({
 
         <button onClick={() => navigate('/')}
           className="px-6 py-3 bg-mepbm-gold text-white font-bold rounded hover:bg-yellow-400 transition">
-          Back to Games
+          {t('setup.back')}
         </button>
       </div>
     </div>
@@ -434,6 +436,7 @@ function SetupView({
 // ACTIVE GAME VIEW
 // ═══════════════════════════════════════════
 function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedNationId, selectedHex, setSelectedHex, activeTab, setActiveTab, navigate }: any) {
+  const { t } = useLang();
   const nation = gameState?.nation;
   const nations = gameState?.nations || [];
   const characters = gameState?.characters || [];
@@ -453,16 +456,16 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
   const processTurnMutation = useProcessTurn(gameId);
 
   const tabs: { key: TabType; label: string }[] = [
-    { key: 'nation', label: 'Nation' },
-    { key: 'map', label: 'Map' },
-    { key: 'cities', label: `Cities (${populationCentres.length})` },
-    { key: 'armies', label: `Armies (${armies.length})` },
-    { key: 'characters', label: `Characters (${characters.length})` },
-    { key: 'orders', label: 'Orders' },
-    { key: 'messages', label: 'Messages' },
-    { key: 'relations', label: 'Relations' },
-    { key: 'reports', label: `Reports (${turns.length})` },
-    { key: 'standings', label: 'Standings' },
+    { key: 'nation', label: t('game.tabNation') },
+    { key: 'map', label: t('game.tabMap') },
+    { key: 'cities', label: `${t('game.tabCities')} (${populationCentres.length})` },
+    { key: 'armies', label: `${t('game.tabArmies')} (${armies.length})` },
+    { key: 'characters', label: `${t('game.tabCharacters')} (${characters.length})` },
+    { key: 'orders', label: t('game.tabOrders') },
+    { key: 'messages', label: t('game.tabMessages') },
+    { key: 'relations', label: t('game.tabRelations') },
+    { key: 'reports', label: `${t('game.tabReports')} (${turns.length})` },
+    { key: 'standings', label: t('game.tabStandings') },
   ];
 
   // Group nations by allegiance for sidebar
@@ -476,12 +479,12 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
       {canSwitchNations && (
         <div className="w-56 bg-gray-800 border-r border-gray-700 flex-shrink-0 overflow-y-auto">
           <div className="p-3 border-b border-gray-700">
-            <h3 className="text-xs font-bold text-mepbm-gold uppercase tracking-wider">Nations</h3>
+            <h3 className="text-xs font-bold text-mepbm-gold uppercase tracking-wider">{t('game.nations')}</h3>
           </div>
           <div className="p-2 space-y-1">
             {freeNations.length > 0 && (
               <div className="mb-2">
-                <div className="px-2 py-1 text-[10px] font-bold text-green-400 uppercase tracking-wider">Free Peoples</div>
+                <div className="px-2 py-1 text-[10px] font-bold text-green-400 uppercase tracking-wider">{t('game.freeP')}</div>
                 {freeNations.map((n: any) => (
                   <button
                     key={n.id}
@@ -500,7 +503,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
             )}
             {darkNations.length > 0 && (
               <div className="mb-2">
-                <div className="px-2 py-1 text-[10px] font-bold text-red-400 uppercase tracking-wider">Dark Servants</div>
+                <div className="px-2 py-1 text-[10px] font-bold text-red-400 uppercase tracking-wider">{t('game.darkP')}</div>
                 {darkNations.map((n: any) => (
                   <button
                     key={n.id}
@@ -519,7 +522,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
             )}
             {neutralNations.length > 0 && (
               <div className="mb-2">
-                <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Neutral</div>
+                <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t('game.neut')}</div>
                 {neutralNations.map((n: any) => (
                   <button
                     key={n.id}
@@ -546,16 +549,17 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
         <div className="bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button onClick={() => navigate('/')} className="text-mepbm-gold hover:text-yellow-400 text-sm font-semibold">
-              ← Games
+              {t('game.games')}
             </button>
             <h1 className="text-lg font-bold text-white">{gameState?.game?.name}</h1>
             {currentTurn && (
               <span className="text-sm text-gray-400">
-                Turn {currentTurn.number} · {currentTurn.season} · Deadline: {new Date(currentTurn.deadline).toLocaleDateString()}
+                {t('game.turnLine', { n: currentTurn.number, s: currentTurn.season, d: new Date(currentTurn.deadline).toLocaleDateString() })}
               </span>
             )}
           </div>
           <div className="flex items-center gap-3">
+            <LanguageSwitcher small />
             {canProcess && (
               <div className="flex items-center gap-2">
                 <button
@@ -563,15 +567,15 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
                   disabled={processTurnMutation.isLoading}
                   className="px-4 py-2 bg-red-600 text-white text-sm font-bold rounded hover:bg-red-500 transition disabled:opacity-50"
                 >
-                  {processTurnMutation.isLoading ? 'Processing...' : 'Process Turn'}
+                  {processTurnMutation.isLoading ? t('game.processing') : t('game.process')}
                 </button>
                 {processTurnMutation.isError && (
                   <span className="text-red-400 text-xs">
-                    {(processTurnMutation.error as any)?.response?.data?.error || 'Failed'}
+                    {(processTurnMutation.error as any)?.response?.data?.error || t('game.procFailed')}
                   </span>
                 )}
                 {processTurnMutation.isSuccess && (
-                  <span className="text-green-400 text-xs">Turn processed</span>
+                  <span className="text-green-400 text-xs">{t('game.procDone')}</span>
                 )}
               </div>
             )}
@@ -579,7 +583,7 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded" style={{ backgroundColor: nation.color }} />
                 <span className="font-bold text-white">{nation.name}</span>
-                <span className="text-sm text-gray-400">({nation.allegiance})</span>
+                <span className="text-sm text-gray-400">({allegianceLabel(nation.allegiance, t)})</span>
               </div>
             )}
           </div>
@@ -587,12 +591,12 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
 
         {needsNation && (
           <div className="bg-gray-800 border-b border-yellow-600 px-6 py-3 flex items-center gap-4">
-            <span className="text-sm text-yellow-300">You have no nation yet. Claim one of the free nations:</span>
+            <span className="text-sm text-yellow-300">{t('game.noNation')}</span>
             <button
               onClick={() => setShowNationPicker(true)}
               className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-500 transition"
             >
-              Choose Your Nation
+              {t('game.chooseNation')}
             </button>
           </div>
         )}
@@ -608,15 +612,15 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
         {/* Nation resources bar */}
         {nation && (
           <div className="bg-gray-800 border-b border-gray-700 px-6 py-2 flex gap-6 text-sm">
-            <span className="text-yellow-400">Gold: {nation.gold}</span>
-            <span className="text-green-400">Food: {nation.food}</span>
-            <span className="text-amber-600">Timber: {nation.timber}</span>
-            <span className="text-orange-400">Leather: {nation.leather}</span>
-            <span className="text-gray-300">Bronze: {nation.bronze}</span>
-            <span className="text-blue-300">Steel: {nation.steel}</span>
-            {nation.mithril > 0 && <span className="text-purple-400">Mithril: {nation.mithril}</span>}
-            <span className="text-emerald-400">Mounts: {nation.mounts}</span>
-            <span className="text-gray-500">Tax: {nation.taxRate}%</span>
+            <span className="text-yellow-400">{t('game.resGold')}: {nation.gold}</span>
+            <span className="text-green-400">{t('game.resFood')}: {nation.food}</span>
+            <span className="text-amber-600">{t('game.resTimber')}: {nation.timber}</span>
+            <span className="text-orange-400">{t('game.resLeather')}: {nation.leather}</span>
+            <span className="text-gray-300">{t('game.resBronze')}: {nation.bronze}</span>
+            <span className="text-blue-300">{t('game.resSteel')}: {nation.steel}</span>
+            {nation.mithril > 0 && <span className="text-purple-400">{t('game.resMithril')}: {nation.mithril}</span>}
+            <span className="text-emerald-400">{t('game.resMounts')}: {nation.mounts}</span>
+            <span className="text-gray-500">{t('game.resTax')}: {nation.taxRate}%</span>
           </div>
         )}
 
@@ -662,24 +666,24 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
               {selectedHex && (
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                   <h3 className="text-sm font-bold text-mepbm-gold mb-2">
-                    Hex: {selectedHex.q}, {selectedHex.r}
+                    {t('map.hex', { q: selectedHex.q, r: selectedHex.r })}
                   </h3>
                   <div className="text-sm text-gray-400">
                     {(() => {
                       const hex = hexTiles.find((h: any) => h.q === selectedHex.q && h.r === selectedHex.r);
-                      if (!hex) return <span>No data</span>;
+                      if (!hex) return <span>{t('map.noData')}</span>;
                       const feats = [
-                        hex.hasMajorRiver ? 'Major river' : null,
-                        hex.hasMinorRiver ? 'Minor river' : null,
-                        hex.hasRoad ? 'Road' : null,
-                        hex.hasFord ? 'Ford' : null,
-                        hex.hasBridge ? 'Bridge' : null,
+                        hex.hasMajorRiver ? t('map.majorRiver') : null,
+                        hex.hasMinorRiver ? t('map.minorRiver') : null,
+                        hex.hasRoad ? t('map.road') : null,
+                        hex.hasFord ? t('map.ford') : null,
+                        hex.hasBridge ? t('map.bridge') : null,
                       ].filter(Boolean);
-                      return <span>Terrain: {hex.terrain}{feats.length > 0 ? ` (${feats.join(' · ')})` : ''}</span>;
+                      return <span>{t('map.terrainLine', { t: hex.terrain, f: feats.length > 0 ? ` (${feats.join(' · ')})` : '' })}</span>;
                     })()}
                     {(() => {
                       const pc = populationCentres.find((p: any) => p.locationHex === `${selectedHex.q},${selectedHex.r}`);
-                      return pc ? <span className="ml-4 text-mepbm-gold">★ {pc.name}{pc.isCapital ? ' (Capital)' : ''}</span> : null;
+                      return pc ? <span className="ml-4 text-mepbm-gold">★ {pc.name}{pc.isCapital ? ` ${t('map.capitalSuffix')}` : ''}</span> : null;
                     })()}
                     {(() => {
                       const army = armies.find((a: any) => a.locationHex === `${selectedHex.q},${selectedHex.r}`);
@@ -742,28 +746,31 @@ function ActiveGameView({ gameState, isTestAdmin, selectedNationId, setSelectedN
 // ═══════════════════════════════════════════
 // RELATIONS TAB
 // ═══════════════════════════════════════════
-const RELATION_LEVELS = [
-  { value: 2, label: 'Ally' },
-  { value: 1, label: 'Tolerant' },
-  { value: 0, label: 'Neutral' },
-  { value: -1, label: 'Hostile' },
-  { value: -2, label: 'Enemy' },
-];
+function allegianceLabel(code: string, t: TFunc): string {
+  if (code === 'free_peoples') return t('game.freeP');
+  if (code === 'dark_servants') return t('game.darkP');
+  if (code === 'neutral') return t('game.neut');
+  return code;
+}
 
-const ALLEGIANCE_LABELS: Record<string, string> = {
-  free_peoples: 'Free Peoples',
-  dark_servants: 'Dark Servants',
-  neutral: 'Neutral',
-};
+function relLevels(t: TFunc) {
+  return [
+    { value: 2, label: t('rel.ally') },
+    { value: 1, label: t('rel.tolerant') },
+    { value: 0, label: t('rel.neutral') },
+    { value: -1, label: t('rel.hostile') },
+    { value: -2, label: t('rel.enemy') },
+  ];
+}
 
-function relationBadge(level: number) {
+function relationBadge(level: number, t: TFunc) {
   const color =
     level >= 2 ? 'bg-green-600 text-white'
     : level === 1 ? 'bg-blue-600 text-white'
     : level === 0 ? 'bg-gray-600 text-white'
     : level === -1 ? 'bg-orange-600 text-white'
     : 'bg-red-600 text-white';
-  const label = RELATION_LEVELS.find((l) => l.value === level)?.label ?? `${level}`;
+  const label = relLevels(t).find((l) => l.value === level)?.label ?? `${level}`;
   return <span className={`px-2 py-1 rounded text-xs ${color}`}>{label} ({level})</span>;
 }
 
@@ -774,6 +781,7 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
   allNations: any[];
   relations: any[];
 }) {
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [savingId, setSavingId] = useState<string | null>(null);
 
@@ -792,7 +800,7 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
   );
 
   if (!nationId) {
-    return <div className="text-gray-400">Select a nation to view its relations.</div>;
+    return <div className="text-gray-400">{t('rel.selectNation')}</div>;
   }
 
   const relByTarget = new Map<string, number>();
@@ -802,17 +810,16 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
   return (
     <div className="space-y-4">
       <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 text-sm text-gray-300">
-        Relations of <span className="font-bold text-white">{nationName}</span>.
-        Level &gt; 0 (tolerant or ally) lets your armies pass; 0 or less blocks them.
+        {t('rel.introA')}<span className="font-bold text-white">{nationName}</span>{t('rel.introB')}
       </div>
       <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-700 bg-gray-750">
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Nation</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Side</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Relation</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Change to</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('rel.thNation')}</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('rel.thSide')}</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('rel.thRelation')}</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('rel.thChange')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
@@ -826,8 +833,8 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
                       {n.name}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-300">{ALLEGIANCE_LABELS[n.allegiance] || n.allegiance}</td>
-                  <td className="px-4 py-3 text-sm">{relationBadge(level)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-300">{allegianceLabel(n.allegiance, t)}</td>
+                  <td className="px-4 py-3 text-sm">{relationBadge(level, t)}</td>
                   <td className="px-4 py-3 text-sm">
                     <select
                       className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600"
@@ -835,11 +842,11 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
                       disabled={savingId === n.id}
                       onChange={(e) => mutation.mutate({ targetId: n.id, level: parseInt(e.target.value, 10) })}
                     >
-                      {RELATION_LEVELS.map((l) => (
+                      {relLevels(t).map((l) => (
                         <option key={l.value} value={l.value}>{l.label} ({l.value})</option>
                       ))}
                     </select>
-                    {savingId === n.id && <span className="ml-2 text-xs text-gray-400">Saving…</span>}
+                    {savingId === n.id && <span className="ml-2 text-xs text-gray-400">{t('rel.saving')}</span>}
                   </td>
                 </tr>
               );
@@ -855,6 +862,7 @@ function RelationsTab({ gameId, nationId, nationName, allNations, relations }: {
 // REPORTS TAB (turn results)
 // ═══════════════════════════════════════════
 function ReportsTab({ gameId, turns }: { gameId: string; turns: any[] }) {
+  const { t: tr } = useLang();
   const [selectedTurnId, setSelectedTurnId] = useState<string | null>(turns[0]?.id ?? null);
   const activeTurnId = turns.some((t: any) => t.id === selectedTurnId) ? selectedTurnId : turns[0]?.id ?? null;
 
@@ -868,7 +876,7 @@ function ReportsTab({ gameId, turns }: { gameId: string; turns: any[] }) {
   );
 
   if (turns.length === 0) {
-    return <div className="text-gray-400">No turns yet. Reports appear after the first turn is processed.</div>;
+    return <div className="text-gray-400">{tr('rep.noTurns')}</div>;
   }
 
   return (
@@ -884,17 +892,17 @@ function ReportsTab({ gameId, turns }: { gameId: string; turns: any[] }) {
                 : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'
             }`}
           >
-            Turn {t.number} · {t.season} ({t.status})
+            {tr('rep.turnBtn', { n: t.number, s: t.season, st: t.status })}
           </button>
         ))}
       </div>
 
-      {isLoading && <div className="text-gray-400">Loading report...</div>}
-      {isError && <div className="text-red-400">Failed to load the turn report.</div>}
+      {isLoading && <div className="text-gray-400">{tr('rep.loading')}</div>}
+      {isError && <div className="text-red-400">{tr('rep.loadFail')}</div>}
       {data && (
         <div className="space-y-4">
           {data.sections.length === 0 && (
-            <div className="text-gray-400">No results recorded for this turn yet.</div>
+            <div className="text-gray-400">{tr('rep.noResults')}</div>
           )}
           {data.sections.map((s, i) => (
             <div key={i} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
@@ -925,21 +933,22 @@ function ReportsTab({ gameId, turns }: { gameId: string; turns: any[] }) {
 // STANDINGS TAB (victory points per allegiance)
 // ═══════════════════════════════════════════
 function StandingsTab({ allNations }: { allNations: any[] }) {
+  const { t } = useLang();
   if (allNations.length === 0) {
-    return <div className="text-gray-400">No nations in this game.</div>;
+    return <div className="text-gray-400">{t('stand.none')}</div>;
   }
 
   const groups: Array<{ key: string; title: string; color: string }> = [
-    { key: 'free_peoples', title: 'Free Peoples', color: 'text-green-400' },
-    { key: 'dark_servants', title: 'Dark Servants', color: 'text-red-400' },
-    { key: 'neutral', title: 'Neutral', color: 'text-gray-400' },
+    { key: 'free_peoples', title: t('game.freeP'), color: 'text-green-400' },
+    { key: 'dark_servants', title: t('game.darkP'), color: 'text-red-400' },
+    { key: 'neutral', title: t('game.neut'), color: 'text-gray-400' },
   ];
 
   return (
     <div className="space-y-4">
       <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 text-sm text-gray-300">
-        Turn victory points per nation (recalculated each turn from areas of play, not cumulative).
-        Eliminated nations are ranked but cannot win.
+        {t('stand.intro')}
+        {' '}{t('stand.elimNote')}
       </div>
       {groups.map((g) => {
         const rows = allNations
@@ -961,11 +970,11 @@ function StandingsTab({ allNations }: { allNations: any[] }) {
                         <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: n.color }} />
                         {n.name}
                         {n.isEliminated && (
-                          <span className="text-xs px-2 py-0.5 rounded bg-red-900 text-red-300">eliminated</span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-red-900 text-red-300">{t('stand.eliminated')}</span>
                         )}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-sm text-right text-mepbm-gold font-bold">{n.victoryPoints ?? 0} VP</td>
+                    <td className="px-4 py-2 text-sm text-right text-mepbm-gold font-bold">{n.victoryPoints ?? 0} {t('stand.vp')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -987,18 +996,19 @@ function NationTab({ nation, populationCentres, armies, characters, currentTurn 
   characters: any[];
   currentTurn: any;
 }) {
+  const { t } = useLang();
   if (!nation) {
-    return <div className="text-gray-400">No nation selected.</div>;
+    return <div className="text-gray-400">{t('nation.none')}</div>;
   }
   const capital = populationCentres.find((p: any) => p.isCapital);
   const abilities: any[] = nation.abilities || [];
   const stats = [
-    { label: 'Cities', value: populationCentres.length },
-    { label: 'Armies', value: armies.length },
-    { label: 'Characters', value: characters.length },
-    { label: 'Tax rate', value: `${nation.taxRate ?? ''}%` },
-    { label: 'Victory points', value: nation.victoryPoints ?? 0 },
-    { label: 'Warship strength', value: nation.warshipStrength ?? 0 },
+    { label: t('nation.cities'), value: populationCentres.length },
+    { label: t('nation.armies'), value: armies.length },
+    { label: t('nation.characters'), value: characters.length },
+    { label: t('nation.taxRate'), value: `${nation.taxRate ?? ''}%` },
+    { label: t('nation.vp'), value: nation.victoryPoints ?? 0 },
+    { label: t('nation.ws'), value: nation.warshipStrength ?? 0 },
   ];
 
   return (
@@ -1009,8 +1019,8 @@ function NationTab({ nation, populationCentres, armies, characters, currentTurn 
           <div>
             <h2 className="text-2xl font-bold text-white">{nation.name}</h2>
             <p className="text-sm text-gray-400">
-              {ALLEGIANCE_LABELS[nation.allegiance] || nation.allegiance}
-              {currentTurn ? ` · Turn ${currentTurn.number}${currentTurn.season ? ` · ${currentTurn.season}` : ''}` : ''}
+              {allegianceLabel(nation.allegiance, t)}
+              {currentTurn ? ` · ${t('game.turnShort', { n: currentTurn.number, s: currentTurn.season ? ` · ${currentTurn.season}` : '' })}` : ''}
             </p>
           </div>
         </div>
@@ -1024,12 +1034,12 @@ function NationTab({ nation, populationCentres, armies, characters, currentTurn 
         </div>
         {capital && (
           <p className="mt-3 text-sm text-gray-300">
-            ★ Capital: {capital.name} <span className="text-gray-500">@ {capital.locationHex}</span>
+            {t('nation.capitalLine', { x: capital.name, h: capital.locationHex })}
           </p>
         )}
       </div>
       <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h3 className="text-sm font-bold text-mepbm-gold uppercase tracking-wider mb-3">Special Nation Abilities</h3>
+        <h3 className="text-sm font-bold text-mepbm-gold uppercase tracking-wider mb-3">{t('nation.abilities')}</h3>
         {abilities.length === 0 ? (
           <p className="text-sm text-gray-400">—</p>
         ) : (
@@ -1053,11 +1063,11 @@ function terrainAt(hexTiles: any[], locationHex: string): string {
   return hex ? hex.terrain : '?';
 }
 
-function pcSentence(populationCentres: any[], locationHex: string, nationName?: string): string | null {
+function pcSentence(populationCentres: any[], locationHex: string, nationName: string | undefined, t: TFunc): string | null {
   const pc = populationCentres.find((p: any) => p.locationHex === locationHex);
   if (!pc) return null;
   const fort = pc.fortification ? ` / ${pc.fortification}` : '';
-  return `The ${pc.size}${fort} of ${pc.name} flying the flag of ${nationName || 'us'} is here.`;
+  return t('char.pcSentence', { size: pc.size, fort, name: pc.name, owner: nationName || 'us' });
 }
 
 // ═══════════════════════════════════════════
@@ -1093,11 +1103,12 @@ function pcResources(pc: any, taxRate: number): Record<string, { production: num
 }
 
 function CitiesTab({ populationCentres, hexTiles, taxRate }: { populationCentres: any[]; hexTiles: any[]; taxRate?: number }) {
+  const { t } = useLang();
   if (populationCentres.length === 0) {
-    return <div className="text-gray-400">No population centres visible.</div>;
+    return <div className="text-gray-400">{t('city.none')}</div>;
   }
 
-  const docks = (pc: any) => pc.hasPort ? 'Port' : pc.hasHarbour ? 'Harbour' : 'None';
+  const docks = (pc: any) => pc.hasPort ? t('city.port') : pc.hasHarbour ? t('city.harbour') : t('city.none2');
 
   return (
     <div className="space-y-4">
@@ -1108,30 +1119,30 @@ function CitiesTab({ populationCentres, hexTiles, taxRate }: { populationCentres
           <div key={pc.id} className="bg-gray-800 rounded-lg p-5 border border-gray-700">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-lg font-bold text-white">
-                {pc.isCapital ? '★ ' : '▢ '}{pc.name}{pc.isCapital ? ' (Capital)' : ''}
+                {pc.isCapital ? '★ ' : '▢ '}{pc.name}{pc.isCapital ? ` ${t('map.capitalSuffix')}` : ''}
               </h3>
             </div>
             <p className="text-sm text-gray-400 mt-1">
-              Location: @ {pc.locationHex} in {terrainAt(hexTiles, pc.locationHex)}
+              {t('city.loc', { h: pc.locationHex, t: terrainAt(hexTiles, pc.locationHex) })}
             </p>
             <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 mt-3 text-sm">
-              <div><dt className="inline text-gray-500">Size: </dt><dd className="inline text-gray-200 capitalize">{pc.size}</dd></div>
-              <div><dt className="inline text-gray-500">Fortifications: </dt><dd className="inline text-gray-200">{pc.fortification || 'None'}</dd></div>
-              <div><dt className="inline text-gray-500">Loyalty: </dt><dd className="inline text-gray-200">{pc.loyalty}</dd></div>
-              <div><dt className="inline text-gray-500">Docks: </dt><dd className="inline text-gray-200">{docks(pc)}</dd></div>
-              <div><dt className="inline text-gray-500">Hidden?: </dt><dd className="inline text-gray-200">{pc.isHidden ? 'Yes' : 'No'}</dd></div>
-              <div><dt className="inline text-gray-500">Sieged?: </dt><dd className="inline text-gray-200">{pc.isSieged ? 'Yes' : 'No'}</dd></div>
-              <div><dt className="inline text-gray-500">Tax: </dt><dd className="inline text-gray-200">{rate}%</dd></div>
-              <div><dt className="inline text-gray-500">Mined gold: </dt><dd className="inline text-gray-200">{Math.max(0, pc.production)}</dd></div>
+              <div><dt className="inline text-gray-500">{t('city.size')} </dt><dd className="inline text-gray-200 capitalize">{pc.size}</dd></div>
+              <div><dt className="inline text-gray-500">{t('city.fort')} </dt><dd className="inline text-gray-200">{pc.fortification || t('city.none2')}</dd></div>
+              <div><dt className="inline text-gray-500">{t('city.loyalty')} </dt><dd className="inline text-gray-200">{pc.loyalty}</dd></div>
+              <div><dt className="inline text-gray-500">{t('city.docks')} </dt><dd className="inline text-gray-200">{docks(pc)}</dd></div>
+              <div><dt className="inline text-gray-500">{t('city.hidden')} </dt><dd className="inline text-gray-200">{pc.isHidden ? t('city.yes') : t('city.no')}</dd></div>
+              <div><dt className="inline text-gray-500">{t('city.sieged')} </dt><dd className="inline text-gray-200">{pc.isSieged ? t('city.yes') : t('city.no')}</dd></div>
+              <div><dt className="inline text-gray-500">{t('city.tax')} </dt><dd className="inline text-gray-200">{rate}%</dd></div>
+              <div><dt className="inline text-gray-500">{t('city.mined')} </dt><dd className="inline text-gray-200">{Math.max(0, pc.production)}</dd></div>
             </dl>
             <div className="mt-4 border-t border-gray-700 pt-3">
-              <h4 className="text-sm font-bold text-gray-300 mb-2">Resources (turn)</h4>
+              <h4 className="text-sm font-bold text-gray-300 mb-2">{t('city.resTitle')}</h4>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 {CITY_RESOURCES.map((r) => (
                   <div key={r.key} className="bg-gray-900 rounded p-2 border border-gray-800">
-                    <div className={`font-semibold ${r.color}`}>{r.label}</div>
-                    <div className="text-gray-300 mt-1">Prod: <span className="text-gray-100">{resources[r.key].production}</span></div>
-                    <div className="text-gray-300">Stores: <span className="text-gray-100">{resources[r.key].stores}</span></div>
+                    <div className={`font-semibold ${r.color}`}>{t(`game.res${r.key[0].toUpperCase()}${r.key.slice(1)}` as any)}</div>
+                    <div className="text-gray-300 mt-1">{t('city.prod')} <span className="text-gray-100">{resources[r.key].production}</span></div>
+                    <div className="text-gray-300">{t('city.stores')} <span className="text-gray-100">{resources[r.key].stores}</span></div>
                   </div>
                 ))}
               </div>
@@ -1155,12 +1166,36 @@ const TROOP_ROWS = [
   { key: 'menAtArms', label: 'Men-at-Arms', w: 'maaWeaponRank', a: 'maaArmourRank', tr: 'maaTraining' },
 ];
 
-function materialName(rank: number, kind: 'weapon' | 'armour'): string {
-  if (rank >= 100) return 'mithril';
-  if (rank >= 60) return 'steel';
-  if (rank >= 30) return 'bronze';
-  if (kind === 'armour') return rank >= 10 ? 'leather' : 'none';
-  return rank >= 10 ? 'wood' : 'none';
+function materialName(rank: number, kind: 'weapon' | 'armour', t: TFunc): string {
+  if (rank >= 100) return t('army.matMithril');
+  if (rank >= 60) return t('army.matSteel');
+  if (rank >= 30) return t('army.matBronze');
+  if (kind === 'armour') return rank >= 10 ? t('army.matLeather') : t('army.matNone');
+  return rank >= 10 ? t('army.matWood') : t('army.matNone');
+}
+
+function troopLabel(key: string, t: TFunc): string {
+  switch (key) {
+    case 'heavyCavalry': return t('army.trHC');
+    case 'lightCavalry': return t('army.trLC');
+    case 'heavyInfantry': return t('army.trHI');
+    case 'lightInfantry': return t('army.trLI');
+    case 'archers': return t('army.trAR');
+    case 'menAtArms': return t('army.trMA');
+    default: return key;
+  }
+}
+
+function terrainPref(key: string, t: TFunc): string {
+  switch (key) {
+    case 'heavyCavalry': return t('army.terrPlains');
+    case 'lightCavalry': return `${t('army.terrPlains')} / ${t('army.terrDesert')} / ${t('army.terrCoast')}`;
+    case 'heavyInfantry': return `${t('army.terrHills')} / ${t('army.terrMountains')}`;
+    case 'lightInfantry': return t('army.terrForest');
+    case 'archers': return `${t('army.terrHills')} / ${t('army.terrForest')}`;
+    case 'menAtArms': return `${t('army.terrPlains')} / ${t('army.terrHills')} / ${t('army.terrCoast')}`;
+    default: return '';
+  }
 }
 
 // Wiki (armies topic) + CombatResolver: Str/Con base, best/worst tactic, upkeep.
@@ -1185,7 +1220,7 @@ function armyTroopTotal(army: any): number {
   return TROOP_ROWS.reduce((s, t) => s + (army[t.key] || 0), 0);
 }
 
-function ArmyCharChip({ c, isCommander }: { c: any; isCommander: boolean }) {
+function ArmyCharChip({ c, isCommander, t }: { c: any; isCommander: boolean; t: TFunc }) {
   return (
     <Tip
       trigger={
@@ -1194,12 +1229,12 @@ function ArmyCharChip({ c, isCommander }: { c: any; isCommander: boolean }) {
         </span>
       }
     >
-      <span className="block text-white font-bold text-sm">{c.name}{isCommander ? ' (commander)' : ''}</span>
+      <span className="block text-white font-bold text-sm">{c.name}{isCommander ? t('army.commanderMark') : ''}</span>
       <span className="block text-xs text-gray-400 mt-0.5">{c.type ?? ''}</span>
       <span className="block text-sm text-gray-200 mt-1">
-        Command {c.commandSkill ?? 0} · Agent {c.agentSkill ?? 0} · Emissary {c.emissarySkill ?? 0} · Mage {c.mageSkill ?? 0}
+        {t('army.cmdSkills', { c: c.commandSkill ?? 0, a: c.agentSkill ?? 0, e: c.emissarySkill ?? 0, m: c.mageSkill ?? 0 })}
       </span>
-      <span className="block text-sm text-gray-200">Health {c.health ?? '?'}{c.maxHealth ? ` / ${c.maxHealth}` : ''}</span>
+      <span className="block text-sm text-gray-200">{t('army.health', { h: `${c.health ?? '?'}${c.maxHealth ? ` / ${c.maxHealth}` : ''}` })}</span>
     </Tip>
   );
 }
@@ -1207,8 +1242,9 @@ function ArmyCharChip({ c, isCommander }: { c: any; isCommander: boolean }) {
 function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName }: {
   armies: any[]; characters: any[]; populationCentres: any[]; hexTiles: any[]; nationName?: string;
 }) {
+  const { t } = useLang();
   if (armies.length === 0) {
-    return <div className="text-gray-400">No armies visible.</div>;
+    return <div className="text-gray-400">{t('army.none')}</div>;
   }
 
   const charById = new Map<string, any>();
@@ -1218,7 +1254,7 @@ function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName
     <div className="space-y-5">
       {armies.map((army: any) => {
         const commander = army.commanderId ? charById.get(army.commanderId) : null;
-        const pcLine = pcSentence(populationCentres, army.locationHex, nationName);
+        const pcLine = pcSentence(populationCentres, army.locationHex, nationName, t);
         const members = characters.filter((c: any) => c.armyId === army.id);
         const total = armyTroopTotal(army);
         const eats = armyFoodCost(army);
@@ -1237,70 +1273,70 @@ function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName
               <span className="text-xs px-2 py-1 rounded bg-gray-900 border border-gray-600 text-gray-300">
                 @ {army.locationHex} · {terrainAt(hexTiles, army.locationHex)}
               </span>
-              <span className="ml-auto text-xs text-gray-400">{total} troops</span>
+              <span className="ml-auto text-xs text-gray-400">{t('army.troopsWord', { n: total })}</span>
             </div>
 
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Command & Upkeep</div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">{t('army.cmdUpkeep')}</div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <StatBox label="Morale" value={army.morale ?? 0} />
-                <StatBox label="Training (avg)" value={army.training ?? 0} />
-                <StatBox label="Food/turn" value={`${eats} (${total} troops)`} />
-                <StatBox label="Gold/turn" value={upkeep} />
+                <StatBox label={t('army.morale')} value={army.morale ?? 0} />
+                <StatBox label={t('army.trAvg')} value={army.training ?? 0} />
+                <StatBox label={t('army.foodTurn')} value={`${eats} ${t('army.troopsSuffix', { n: total })}`} />
+                <StatBox label={t('army.goldTurn')} value={upkeep} />
               </div>
             </div>
 
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Baggage Train</div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">{t('army.train')}</div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <StatBox label="Food" value={`${food}${turns != null ? ` (${turns} turns)` : ''}`} />
-                <StatBox label="War Machines" value={army.warMachines ?? 0} />
-                <StatBox label="Spare Weapons" value={sparesW > 0 ? `${sparesW} ${sparesWMat}` : '—'} />
-                <StatBox label="Spare Armour" value={sparesA > 0 ? `${sparesA} ${sparesAMat}` : '—'} />
+                <StatBox label={t('army.food')} value={`${food}${turns != null ? ` ${t('army.turnsSuffix', { n: turns })}` : ''}`} />
+                <StatBox label={t('army.wm')} value={army.warMachines ?? 0} />
+                <StatBox label={t('army.sw')} value={sparesW > 0 ? `${sparesW} ${sparesWMat}` : '—'} />
+                <StatBox label={t('army.sa')} value={sparesA > 0 ? `${sparesA} ${sparesAMat}` : '—'} />
               </div>
             </div>
 
             {rows.length > 0 && (
               <div>
-                <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Troops by type, weapon & armour</div>
+                <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">{t('army.troopsTitle')}</div>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-gray-500 uppercase">
-                      <th className="py-1 pr-3">Type</th>
+                      <th className="py-1 pr-3">{t('army.thType')}</th>
                       <th className="py-1 pr-3 text-right">#</th>
-                      <th className="py-1 pr-3">Weapon</th>
-                      <th className="py-1 pr-3">Armour</th>
-                      <th className="py-1 pr-3">Training</th>
+                      <th className="py-1 pr-3">{t('army.thWeapon')}</th>
+                      <th className="py-1 pr-3">{t('army.thArmour')}</th>
+                      <th className="py-1 pr-3">{t('army.thTraining')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-700">
-                    {rows.map((t) => {
-                      const count = army[t.key] || 0;
-                      const w = army[t.w] ?? 0;
-                      const a = army[t.a] ?? 0;
-                      const tr = army[t.tr] ?? army.training ?? 0;
-                      const info = TROOP_INFO[t.key];
+                    {rows.map((row) => {
+                      const count = army[row.key] || 0;
+                      const w = army[row.w] ?? 0;
+                      const a = army[row.a] ?? 0;
+                      const tr = army[row.tr] ?? army.training ?? 0;
+                      const info = TROOP_INFO[row.key];
                       const shareFood = count * (info?.food ?? 1);
                       const shareGold = count * (info?.gold ?? 0);
                       return (
-                        <tr key={t.key} className="text-gray-200">
+                        <tr key={row.key} className="text-gray-200">
                           <td className="py-1 pr-3">
                             <Tip
-                              trigger={<span className="cursor-help">{t.label}</span>}
+                              trigger={<span className="cursor-help">{troopLabel(row.key, t)}</span>}
                             >
-                              <span className="block text-white font-bold text-sm">{t.label} × {count}</span>
-                              <span className="block text-sm text-gray-200 mt-1">Strength {info?.str} · Constitution {info?.con}</span>
-                              <span className="block text-sm text-gray-200">Upkeep: {shareGold} gold + {shareFood} food/turn ({info?.gold}g + {info?.food}f each)</span>
-                              <span className="block text-sm text-gray-200">Best tactic {info?.best} · worst {info?.worst}</span>
-                              <span className="block text-sm text-gray-200">Terrain: {info?.terrain}</span>
-                              <span className="block text-sm text-gray-200 mt-1">Weapons: {materialName(w, 'weapon')} ({w})</span>
-                              <span className="block text-sm text-gray-200">Armour: {materialName(a, 'armour')} ({a})</span>
-                              <span className="block text-sm text-gray-200">Training: {tr}</span>
+                              <span className="block text-white font-bold text-sm">{troopLabel(row.key, t)} × {count}</span>
+                              <span className="block text-sm text-gray-200 mt-1">{t('army.tipStr', { a: info?.str ?? 0, b: info?.con ?? 0 })}</span>
+                              <span className="block text-sm text-gray-200">{t('army.tipUpkeep', { g: shareGold, f: shareFood, pg: info?.gold ?? 0, pf: info?.food ?? 0 })}</span>
+                              <span className="block text-sm text-gray-200">{t('army.tipTactic', { b: info?.best ?? '', w: info?.worst ?? '' })}</span>
+                              <span className="block text-sm text-gray-200">{t('army.tipTerrain', { t: terrainPref(row.key, t) })}</span>
+                              <span className="block text-sm text-gray-200 mt-1">{t('army.tipWeapons', { m: materialName(w, 'weapon', t), r: w })}</span>
+                              <span className="block text-sm text-gray-200">{t('army.tipArmour', { m: materialName(a, 'armour', t), r: a })}</span>
+                              <span className="block text-sm text-gray-200">{t('army.tipTraining', { t: tr })}</span>
                             </Tip>
                           </td>
                           <td className="py-1 pr-3 text-right font-mono">{count}</td>
-                          <td className="py-1 pr-3">{materialName(w, 'weapon')} <span className="text-gray-500 font-mono">({w})</span></td>
-                          <td className="py-1 pr-3">{materialName(a, 'armour')} <span className="text-gray-500 font-mono">({a})</span></td>
+                          <td className="py-1 pr-3">{materialName(w, 'weapon', t)} <span className="text-gray-500 font-mono">({w})</span></td>
+                          <td className="py-1 pr-3">{materialName(a, 'armour', t)} <span className="text-gray-500 font-mono">({a})</span></td>
                           <td className="py-1 pr-3 font-mono">{tr}</td>
                         </tr>
                       );
@@ -1312,18 +1348,18 @@ function ArmiesTab({ armies, characters, populationCentres, hexTiles, nationName
 
             <div>
               <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">
-                Characters{members.length > 0 ? ` (${members.length})` : ''}
+                {t('army.charsTitle')}{members.length > 0 ? ` (${members.length})` : ''}
               </div>
               {members.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {members.map((c: any) => (
-                    <ArmyCharChip key={c.id} c={c} isCommander={c.id === army.commanderId} />
+                    <ArmyCharChip key={c.id} c={c} isCommander={c.id === army.commanderId} t={t} />
                   ))}
                 </div>
               ) : (
                 <p className="text-sm text-gray-500">—</p>
               )}
-              {!commander && <p className="text-xs text-gray-500 mt-1">No commander assigned.</p>}
+              {!commander && <p className="text-xs text-gray-500 mt-1">{t('army.noCommander')}</p>}
             </div>
 
             {pcLine && <p className="text-sm text-gray-400 border-t border-gray-700 pt-3">{pcLine}</p>}
@@ -1348,7 +1384,7 @@ function Tip({ trigger, children }: { trigger: React.ReactNode; children: React.
   );
 }
 
-function ArtifactChip({ a, holder, nationName }: { a: any; holder: string; nationName?: string }) {
+function ArtifactChip({ a, holder, nationName, t }: { a: any; holder: string; nationName?: string; t: TFunc }) {
   const type = a.type ?? a.Type;
   const bonus = a.bonus ?? a.Bonus ?? 0;
   const alignment = a.alignment ?? a.Alignment;
@@ -1368,16 +1404,16 @@ function ArtifactChip({ a, holder, nationName }: { a: any; holder: string; natio
       {type && <span className="block text-xs text-gray-400 mt-0.5">{type}</span>}
       {primary && <span className="block text-sm text-gray-200 mt-1">{primary}</span>}
       {secondary && secondary !== '-' && <span className="block text-sm text-gray-200">{secondary}</span>}
-      <span className="block text-sm text-gray-200 mt-1">Bonus +{bonus}</span>
-      {alignment && <span className="block text-sm text-gray-200">Alignment: {alignment}</span>}
-      {loc && <span className="block text-sm text-gray-200">Location: {loc}</span>}
-      {nationName && <span className="block text-sm text-gray-200">Nation: {nationName}</span>}
-      <span className="block text-sm text-gray-200">Held by: {holder}</span>
+      <span className="block text-sm text-gray-200 mt-1">{t('char.artBonus', { x: bonus })}</span>
+      {alignment && <span className="block text-sm text-gray-200">{t('char.artAlignment', { x: alignment })}</span>}
+      {loc && <span className="block text-sm text-gray-200">{t('char.artLocation', { x: loc })}</span>}
+      {nationName && <span className="block text-sm text-gray-200">{t('char.artNation', { x: nationName })}</span>}
+      <span className="block text-sm text-gray-200">{t('char.artHolder', { x: holder })}</span>
     </Tip>
   );
 }
 
-function SpellChip({ s }: { s: any }) {
+function SpellChip({ s, t }: { s: any; t: TFunc }) {
   const id = s.spellId ?? s.SpellId;
   const info = SPELL_DEFINITIONS.find((d: any) => d.id === id);
   const college = s.wikiCollege ?? info?.category ?? s.college ?? '';
@@ -1397,11 +1433,11 @@ function SpellChip({ s }: { s: any }) {
     >
       <span className="block text-violet-200 font-bold text-sm">#{id} {s.name ?? s.Name ?? info?.name ?? 'Spell'}</span>
       <span className="block text-xs text-gray-400 mt-0.5">
-        {college}{difficulty ? ` · ${difficulty}` : ''}{minRank != null ? ` · min rank ${minRank}` : ''} · rank {s.rank ?? s.Rank ?? 0}
+        {college}{difficulty ? ` · ${difficulty}` : ''}{minRank != null ? ` · ${t('char.spMinRank', { x: minRank })}` : ''} · {t('char.spRank', { x: s.rank ?? s.Rank ?? 0 })}
       </span>
       {effect && <span className="block text-sm text-gray-200 mt-1">{effect}</span>}
-      {prereqs && <span className="block text-sm text-gray-200 mt-1">Prerequisites: {prereqs}</span>}
-      {reqInfo && <span className="block text-sm text-gray-200">Required info: {reqInfo}</span>}
+      {prereqs && <span className="block text-sm text-gray-200 mt-1">{t('char.spPrereq', { x: prereqs })}</span>}
+      {reqInfo && <span className="block text-sm text-gray-200">{t('char.spReqInfo', { x: reqInfo })}</span>}
       {castOrder && <span className="block text-xs text-gray-400 mt-1">{castOrder}</span>}
     </Tip>
   );
@@ -1419,8 +1455,9 @@ function StatBox({ label, value }: { label: string; value: React.ReactNode }) {
 function CharactersTab({ characters, armies, populationCentres, nationName, nations }: {
   characters: any[]; armies: any[]; populationCentres: any[]; nationName?: string; nations?: any[];
 }) {
+  const { t } = useLang();
   if (characters.length === 0) {
-    return <div className="text-gray-400">No characters visible.</div>;
+    return <div className="text-gray-400">{t('char.none')}</div>;
   }
 
   const armyById = new Map<string, any>();
@@ -1439,7 +1476,7 @@ function CharactersTab({ characters, armies, populationCentres, nationName, nati
     <div className="space-y-5">
       {characters.map((char: any) => {
         const army = char.armyId ? armyById.get(char.armyId) : null;
-        const pcLine = pcSentence(populationCentres, char.locationHex, nationName);
+        const pcLine = pcSentence(populationCentres, char.locationHex, nationName, t);
         const artifacts: any[] = char.artifacts || [];
         const spells: any[] = char.spells || [];
         return (
@@ -1449,36 +1486,36 @@ function CharactersTab({ characters, armies, populationCentres, nationName, nati
               <span className={`text-xs px-2 py-1 rounded text-white ${typeColor[char.type] || 'bg-gray-600'}`}>
                 {char.type}
               </span>
-              {char.isChampion && <span className="text-xs px-2 py-1 rounded bg-yellow-600 text-white">Champion</span>}
-              {char.isDead && <span className="text-xs px-2 py-1 rounded bg-red-600 text-white">Dead</span>}
-              {char.isKidnapped && <span className="text-xs px-2 py-1 rounded bg-orange-600 text-white">Kidnapped</span>}
+              {char.isChampion && <span className="text-xs px-2 py-1 rounded bg-yellow-600 text-white">{t('char.champion')}</span>}
+              {char.isDead && <span className="text-xs px-2 py-1 rounded bg-red-600 text-white">{t('char.dead')}</span>}
+              {char.isKidnapped && <span className="text-xs px-2 py-1 rounded bg-orange-600 text-white">{t('char.kidnapped')}</span>}
               <span className="ml-auto text-xs px-2 py-1 rounded bg-gray-900 border border-gray-600 text-gray-300">
                 @ {char.locationHex}
               </span>
             </div>
 
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Skills</div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">{t('char.skills')}</div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <StatBox label="Command" value={char.commandSkill} />
-                <StatBox label="Agent" value={char.agentSkill} />
-                <StatBox label="Emissary" value={char.emissarySkill} />
-                <StatBox label="Mage" value={char.mageSkill} />
+                <StatBox label={t('char.command')} value={char.commandSkill} />
+                <StatBox label={t('char.agent')} value={char.agentSkill} />
+                <StatBox label={t('char.emissary')} value={char.emissarySkill} />
+                <StatBox label={t('char.mage')} value={char.mageSkill} />
               </div>
             </div>
 
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Status</div>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">{t('char.status')}</div>
               <div className="grid grid-cols-3 gap-2 max-w-md">
-                <StatBox label="Health" value={`${char.health ?? '?'}${char.maxHealth ? ` / ${char.maxHealth}` : ''}`} />
-                <StatBox label="Stealth" value={char.stealth ?? 0} />
-                <StatBox label="Challenge" value={char.challengeRank ?? 0} />
+                <StatBox label={t('char.health')} value={`${char.health ?? '?'}${char.maxHealth ? ` / ${char.maxHealth}` : ''}`} />
+                <StatBox label={t('char.stealth')} value={char.stealth ?? 0} />
+                <StatBox label={t('char.challenge')} value={char.challengeRank ?? 0} />
               </div>
             </div>
 
             <div>
               <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">
-                Artifacts{artifacts.length > 0 ? ` (${artifacts.length})` : ''}
+                {t('char.artifacts')}{artifacts.length > 0 ? ` (${artifacts.length})` : ''}
               </div>
               {artifacts.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
@@ -1488,6 +1525,7 @@ function CharactersTab({ characters, armies, populationCentres, nationName, nati
                       a={a}
                       holder={char.name}
                       nationName={nationById.get(a.nationId ?? a.NationId)}
+                      t={t}
                     />
                   ))}
                 </div>
@@ -1498,11 +1536,11 @@ function CharactersTab({ characters, armies, populationCentres, nationName, nati
 
             <div>
               <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">
-                Spells{spells.length > 0 ? ` (${spells.length})` : ''}
+                {t('char.spells')}{spells.length > 0 ? ` (${spells.length})` : ''}
               </div>
               {spells.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {spells.map((s: any) => <SpellChip key={s.spellId ?? s.SpellId} s={s} />)}
+                  {spells.map((s: any) => <SpellChip key={s.spellId ?? s.SpellId} s={s} t={t} />)}
                 </div>
               ) : (
                 <p className="text-sm text-gray-500">—</p>
@@ -1510,7 +1548,7 @@ function CharactersTab({ characters, armies, populationCentres, nationName, nati
             </div>
 
             <p className="text-sm text-gray-400 border-t border-gray-700 pt-3">
-              {army ? `${char.name} commands an army at ${char.locationHex}.` : `${char.name} is currently at ${char.locationHex}.`}
+              {army ? t('char.cmdArmy', { n: char.name, h: char.locationHex }) : t('char.atHex', { n: char.name, h: char.locationHex })}
               {pcLine ? ` ${pcLine}` : ''}
             </p>
           </div>

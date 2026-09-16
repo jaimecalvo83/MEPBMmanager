@@ -3,6 +3,7 @@ import { ORDER_DEFINITIONS } from '@MEPBMmanager/shared';
 import type { OrderRestriction } from '@MEPBMmanager/shared';
 import { ORDER_SCHEMAS } from './orderSchemas';
 import { useOrderEstimate, type OrderFieldSpec } from '../../hooks/useOrders';
+import { useLang, type TFunc } from '../../i18n/lang';
 
 // ── Static prerequisites (mirror backend CheckEligible + resolve) ──
 const CAPITAL_ORDERS = new Set([175, 180, 185, 280, 300, 325, 660, 725, 728, 731, 734, 737]);
@@ -15,54 +16,61 @@ const COMPANY_ORDERS = new Set([750, 760]);
 const OWN_PC_ORDERS = new Set([520, 530, 535, 550, 705, 710]);
 const LAND_ORDERS = new Set([745, 552, 555, 910, 915, 925, 930]);
 
-const SKILL_TYPE: Partial<Record<OrderRestriction, string>> = {
-  c: 'Command',
-  a: 'Agent',
-  e: 'Emissary',
-  m: 'Mage',
-};
-
-const RESTRICTION_PREREQ: Partial<Record<OrderRestriction, string>> = {
-  com: 'Force commander',
-  company: 'In a company',
-  cap: 'At capital',
-  fa: 'Fourth Age only',
-  k: 'Kingdom',
-};
-
-const SPELL_PREREQ: Record<number, string> = {
-  120: 'Known healing spell',
-  225: 'Known combat spell',
-  330: 'Known conjuring spell',
-  825: 'Known movement spell',
-  940: 'Known lore spell',
-};
-
-function orderType(code: number): string {
-  const def = ORDER_DEFINITIONS.find((d) => d.code === code);
-  const skills = (def?.restrictions ?? []).filter((r): r is keyof typeof SKILL_TYPE => r in SKILL_TYPE);
-  if (skills.length === 0) return 'General';
-  return [...new Set(skills.map((s) => SKILL_TYPE[s]))].join(' / ');
+function skillType(r: OrderRestriction, t: TFunc): string | null {
+  switch (r) {
+    case 'c': return t('ord.typeCommand');
+    case 'a': return t('ord.typeAgent');
+    case 'e': return t('ord.typeEmissary');
+    case 'm': return t('ord.typeMage');
+    default: return null;
+  }
 }
 
-function orderPrereqs(code: number): string[] {
+function restrictionPrereq(r: OrderRestriction, t: TFunc): string | null {
+  switch (r) {
+    case 'com': return t('ord.rForceCommander');
+    case 'company': return t('ord.rCompany');
+    case 'cap': return t('ord.rCapital');
+    case 'fa': return t('ord.rFourthAge');
+    case 'k': return t('ord.rKingdom');
+    default: return null;
+  }
+}
+
+function spellPrereq(code: number, t: TFunc): string | null {
+  switch (code) {
+    case 120: return t('ord.pHeal');
+    case 225: return t('ord.pCombatSpell');
+    case 330: return t('ord.pConjuring');
+    case 825: return t('ord.pMovement');
+    case 940: return t('ord.pLore');
+    default: return null;
+  }
+}
+
+function orderType(code: number, t: TFunc): string {
+  const def = ORDER_DEFINITIONS.find((d) => d.code === code);
+  const skills = [...new Set((def?.restrictions ?? []).map((r) => skillType(r, t)).filter((s): s is string => s != null))];
+  if (skills.length === 0) return t('ord.typeGeneral');
+  return skills.join(' / ');
+}
+
+function orderPrereqs(code: number, t: TFunc): string[] {
   const def = ORDER_DEFINITIONS.find((d) => d.code === code);
   const out: string[] = [];
-  for (const r of def?.restrictions ?? []) {
-    const t = RESTRICTION_PREREQ[r];
-    if (t && !out.includes(t)) out.push(t);
-  }
-  if (CAPITAL_ORDERS.has(code) && !out.includes('At capital')) out.push('At your capital');
-  if (code === 950) out.push('At your current capital');
-  if (ARMY_ORDERS.has(code)) out.push('In an army');
-  if (code === 830) out.push('Command a navy');
-  if (NAVY_NATION_ORDERS.has(code)) out.push('Nation owns a navy');
-  if (COMPANY_ORDERS.has(code) && !out.includes('In a company')) out.push('In a company');
-  if (OWN_PC_ORDERS.has(code)) out.push('At one of your population centres');
-  if (LAND_ORDERS.has(code)) out.push('On land');
-  if (code === 205) out.push('Held combat artifact');
-  if (code === 360 || code === 792) out.push('Held artifact');
-  if (SPELL_PREREQ[code]) out.push(SPELL_PREREQ[code]);
+  const push = (s: string | null) => { if (s && !out.includes(s)) out.push(s); };
+  for (const r of def?.restrictions ?? []) push(restrictionPrereq(r, t));
+  if (CAPITAL_ORDERS.has(code)) push(t('ord.pCapital'));
+  if (code === 950) push(t('ord.pCurrentCapital'));
+  if (ARMY_ORDERS.has(code)) push(t('ord.pArmy'));
+  if (code === 830) push(t('ord.pNavy'));
+  if (NAVY_NATION_ORDERS.has(code)) push(t('ord.pNavyNation'));
+  if (COMPANY_ORDERS.has(code)) push(t('ord.pCompany'));
+  if (OWN_PC_ORDERS.has(code)) push(t('ord.pOwnPc'));
+  if (LAND_ORDERS.has(code)) push(t('ord.pLand'));
+  if (code === 205) push(t('ord.pCombatArt'));
+  if (code === 360 || code === 792) push(t('ord.pHeldArt'));
+  push(spellPrereq(code, t));
   return out;
 }
 
@@ -77,30 +85,31 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 // Shared 6-section body: title / type / difficulty / prerequisites / required info / description.
 export function OrderTipBody({ code, requires }: { code: number; requires?: OrderFieldSpec[] | null }) {
+  const { t } = useLang();
   const def = ORDER_DEFINITIONS.find((d) => d.code === code);
   const schema = ORDER_SCHEMAS[code];
   if (!def) return <span className="text-mepbm-gold">[{code}]</span>;
-  const prereqs = orderPrereqs(code);
+  const prereqs = orderPrereqs(code, t);
   return (
     <span>
       <span className="block text-mepbm-gold font-bold text-sm">[{def.code}] {def.name}</span>
-      <Section title="Type">{orderType(code)}</Section>
-      <Section title="Difficulty">{def.difficulty}{def.skillIncrease ? ' · +skill' : ''}</Section>
+      <Section title={t('ord.tipType')}>{orderType(code, t)}</Section>
+      <Section title={t('ord.tipDifficulty')}>{def.difficulty}{def.skillIncrease ? t('ord.skillPlus') : ''}</Section>
       {prereqs.length > 0 && (
-        <Section title="Prerequisites">
+        <Section title={t('ord.tipPrereq')}>
           {prereqs.map((p) => (
             <span key={p} className="block text-xs">• {p}</span>
           ))}
         </Section>
       )}
       {requires && requires.length > 0 && (
-        <Section title="Required information">
+        <Section title={t('ord.tipReqInfo')}>
           {requires.map((f) => (
             <span key={f.key} className="block text-xs">• {f.label}{f.required ? ' *' : ''}</span>
           ))}
         </Section>
       )}
-      <Section title="Description">
+      <Section title={t('ord.tipDesc')}>
         {def.description}
         {schema?.help && <span className="block text-xs text-gray-400 italic mt-1">{schema.help}</span>}
       </Section>

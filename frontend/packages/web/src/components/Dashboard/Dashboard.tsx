@@ -4,8 +4,10 @@ import { useAuthStore } from '../../stores/authStore';
 import { useGames, useCreateGame } from '../../hooks/useGames';
 import { useQueryClient } from 'react-query';
 import { gamesApi } from '../../api/client';
+import { useLang, LanguageSwitcher } from '../../i18n/lang';
 
 export default function Dashboard() {
+  const { t } = useLang();
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -79,20 +81,21 @@ const handleCreate = async () => {
           <span className="text-xs px-2 py-0.5 rounded bg-gray-700 text-gray-300">
             {user?.role}
           </span>
+          <LanguageSwitcher small />
           <button onClick={logout} className="text-sm text-gray-500 hover:text-red-400 transition">
-            Logout
+            {t('auth.logout')}
           </button>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-mepbm-gold">My Games</h2>
+          <h2 className="text-2xl font-bold text-mepbm-gold">{t('dash.myGames')}</h2>
           <button
             onClick={() => setShowCreate(!showCreate)}
             className="px-4 py-2 bg-mepbm-gold text-gray-900 font-bold rounded hover:bg-yellow-400 transition"
           >
-            Create Game
+            {t('dash.createGame')}
           </button>
         </div>
 
@@ -102,7 +105,7 @@ const handleCreate = async () => {
               <div className="flex gap-4">
                 <input
                   type="text"
-                  placeholder="Game name"
+                  placeholder={t('dash.gameName')}
                   value={newGameName}
                   onChange={(e) => setNewGameName(e.target.value)}
                   className="flex-1 p-3 bg-gray-700 rounded border border-gray-600 focus:border-mepbm-gold focus:outline-none"
@@ -119,7 +122,7 @@ const handleCreate = async () => {
 
               <div>
                 <label className="block text-sm text-gray-400 mb-2">
-                  Add players by email (required)
+                  {t('dash.addPlayers')}
                 </label>
                 <div className="flex gap-2 mb-2">
                   <input
@@ -135,7 +138,7 @@ const handleCreate = async () => {
                     disabled={!newPlayerEmail.trim()}
                     className="px-4 py-3 bg-green-600 text-white rounded hover:bg-green-500 transition disabled:opacity-50"
                   >
-                    Add
+                    {t('common.add')}
                   </button>
                 </div>
                 
@@ -158,7 +161,7 @@ const handleCreate = async () => {
                                 disabled={!canBeAdmin}
                                 className="rounded"
                               />
-                              <span className="text-xs text-mepbm-gold">Admin</span>
+                              <span className="text-xs text-mepbm-gold">{t('dash.admin')}</span>
                             </label>
                             <span className="text-sm text-gray-300">{email}</span>
                           </div>
@@ -166,7 +169,7 @@ const handleCreate = async () => {
                             onClick={() => handleRemovePlayer(email)}
                             className="text-red-400 hover:text-red-300 text-sm"
                           >
-                            Remove
+                            {t('common.remove')}
                           </button>
                         </div>
                       );
@@ -176,16 +179,16 @@ const handleCreate = async () => {
                 
                 {playerEmails.length > 0 && (
                   <p className="text-xs text-gray-500 mt-1">
-                    {playerEmails.length} player(s) added, {adminEmails.length}/{getMaxAdmins()} admin(s) selected
+                    {t('dash.counts', { n: playerEmails.length, m: adminEmails.length, max: getMaxAdmins() })}
                     {adminEmails.length >= getMaxAdmins() && (
-                      <span className="text-yellow-400 ml-2">(max reached)</span>
+                      <span className="text-yellow-400 ml-2">{t('dash.maxReached')}</span>
                     )}
                   </p>
                 )}
 
                 {adminEmails.length > 0 && (
                   <div className="mt-3 p-2 bg-gray-600 rounded">
-                    <p className="text-xs text-mepbm-gold font-semibold mb-1">Admins:</p>
+                    <p className="text-xs text-mepbm-gold font-semibold mb-1">{t('dash.admins')}</p>
                     <div className="flex flex-wrap gap-2">
                       {adminEmails.map(email => (
                         <span key={email} className="text-xs bg-mepbm-gold text-gray-900 px-2 py-1 rounded">{email}</span>
@@ -201,7 +204,7 @@ const handleCreate = async () => {
                   disabled={createGame.isLoading || !newGameName.trim() || playerEmails.length === 0}
                   className="px-6 py-3 bg-green-600 text-white font-bold rounded hover:bg-green-500 transition disabled:opacity-50"
                 >
-                  {createGame.isLoading ? 'Creating...' : 'Create Game'}
+                  {createGame.isLoading ? t('dash.creating') : t('dash.createGame')}
                 </button>
                 <button
                   onClick={() => {
@@ -211,7 +214,7 @@ setShowCreate(false);
                   }}
                   className="px-6 py-3 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -219,11 +222,11 @@ setShowCreate(false);
         )}
 
         {isLoading ? (
-          <div className="text-center text-gray-400 py-12">Loading games...</div>
+          <div className="text-center text-gray-400 py-12">{t('dash.loading')}</div>
         ) : !games || games.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-400 text-lg mb-4">No games yet</p>
-            <p className="text-gray-500">Create a new game to get started</p>
+            <p className="text-gray-400 text-lg mb-4">{t('dash.noGames')}</p>
+            <p className="text-gray-500">{t('dash.noGamesSub')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -235,9 +238,9 @@ setShowCreate(false);
               >
                 <h3 className="text-lg font-semibold text-white mb-2">{game.name}</h3>
                 <div className="space-y-1 text-sm text-gray-400">
-                  <p>Scenario: {game.gameTypeCode}</p>
+                  <p>{t('dash.scenario')} {game.gameTypeCode}</p>
                   <p>
-                    Status:{' '}
+                    {t('dash.status')}{' '}
                     <span
                       className={`font-medium ${
                         game.status === 'active'
@@ -250,8 +253,8 @@ setShowCreate(false);
                       {game.status}
                     </span>
                   </p>
-                  <p>Turn: {game.currentTurn || '-'}</p>
-                  <p>Players: {game.playerCount}</p>
+                  <p>{t('dash.turn')} {game.currentTurn || '-'}</p>
+                  <p>{t('dash.players')} {game.playerCount}</p>
                 </div>
                 {game.status === 'setup' && !game.isPlayer && (
                   <button
@@ -262,7 +265,7 @@ setShowCreate(false);
                     }}
                     className="mt-4 w-full px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-500 transition"
                   >
-                    Join Game
+                    {t('dash.joinGame')}
                   </button>
                 )}
                 {game.status === 'setup' && game.isPlayer && (
@@ -273,20 +276,20 @@ setShowCreate(false);
                     }}
                     className="mt-4 w-full px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-500 transition"
                   >
-                    Enter Game
+                    {t('dash.enterGame')}
                   </button>
                 )}
                 {game.status === 'setup' && (
                   <button
                     onClick={async (e) => {
                       e.stopPropagation();
-                      if (confirm('Are you sure you want to delete this game?')) {
+                      if (confirm(t('dash.confirmDelete'))) {
                         await deleteGame(game.id);
                       }
                     }}
                     className="mt-4 w-full px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-500 transition"
                   >
-                    Delete game
+                    {t('dash.deleteGame')}
                   </button>
                 )}
               </div>
