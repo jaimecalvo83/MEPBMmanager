@@ -339,8 +339,8 @@ public class TurnProcessor
         {
             // â”€â”€ Ã“RDENES ECONÃ“MICAS â”€â”€
             300 => ProcessChangeTaxRate(order, parameters),
-            340 => ProcessTransferFoodToArmy(order, parameters),
-            345 => ProcessTransferFoodToPC(order, parameters),
+            340 => ProcessTransferFoodToArmy(order, parameters, game),
+            345 => ProcessTransferFoodToPC(order, parameters, game),
 
             // â”€â”€ RECLUTAMIENTO â”€â”€
             400 => ProcessRecruit(order, "HeavyCavalry", RecruitCostPerUnit[400], parameters),
@@ -374,7 +374,7 @@ public class TurnProcessor
             260 => ProcessSiegePC(order, parameters, game),
 
             // â”€â”€ ECONOMÃA EXTRA â”€â”€
-            347 => ProcessTransferFoodArmyToArmy(order, parameters),
+            347 => ProcessTransferFoodArmyToArmy(order, parameters, game),
             370 => ProcessUpgradeWeapons(order, parameters),
             375 => ProcessUpgradeArmour(order, parameters),
 
@@ -389,7 +389,7 @@ public class TurnProcessor
             // â”€â”€ COMPANIES â”€â”€
             745 => ProcessCreateCompany(order, parameters),
             750 => ProcessDisbandCompany(order, parameters),
-            755 => ProcessJoinCompany(order, parameters),
+            755 => ProcessJoinCompany(order, parameters, game),
             780 => ProcessTransferCommand(order, parameters),
 
             // â”€â”€ HOSTAGES â”€â”€
@@ -425,12 +425,12 @@ public class TurnProcessor
             100 => ProcessHold(order),
             285 => ProcessReactionEncounter(order, parameters),
             290 => ProcessInvestigateEncounter(order, parameters),
-            363 => ProcessTransferHostage(order, parameters),
+            363 => ProcessTransferHostage(order, parameters, game),
             660 => ProcessOfferRansom(order, parameters),
             740 => ProcessRetireCharacter(order, parameters),
             760 => ProcessLeaveCompany(order, parameters),
-            765 => ProcessSplitArmy(order, parameters),
-            785 => ProcessJoinArmy(order, parameters),
+            765 => ProcessSplitArmy(order, parameters, game),
+            785 => ProcessJoinArmy(order, parameters, game),
             790 => ProcessLeaveArmy(order, parameters),
             942 => ProcessMoveTurnMap(order, parameters),
             947 => ProcessNationTransport(order, parameters),
@@ -448,12 +448,12 @@ public class TurnProcessor
             940 => ProcessCastLoreSpell(order, parameters, game),
 
             // â”€â”€ EMISSARY EXTRA â”€â”€
-            500 => ProcessRecruitDoubleAgent(order, parameters),
+            500 => ProcessRecruitDoubleAgent(order, parameters, game),
             505 => ProcessBribeCharacter(order, parameters, game),
-            530 => ProcessImproveHarbour(order, parameters),
-            535 => ProcessAddHarbour(order, parameters),
-            550 => ProcessImprovePC(order, parameters),
-            555 => ProcessCreateCamp(order, parameters),
+            530 => ProcessImproveHarbour(order, parameters, game),
+            535 => ProcessAddHarbour(order, parameters, game),
+            550 => ProcessImprovePC(order, parameters, game),
+            555 => ProcessCreateCamp(order, parameters, game),
             560 => ProcessAbandonCamp(order, parameters),
             565 => ProcessReducePC(order, parameters),
             580 => ProcessSpreadRumours(order, parameters),
@@ -486,15 +486,15 @@ public class TurnProcessor
             490 => ProcessBuildBridge(order, parameters),
             494 => ProcessFortifyPC(order, parameters, game),
             498 => ProcessThreatenPC(order, parameters, game),
-            552 => ProcessPostCamp(order, parameters),
-            605 => ProcessGuardLocation(order, parameters),
-            610 => ProcessGuardCharacter(order, parameters),
+            552 => ProcessPostCamp(order, parameters, game),
+            605 => ProcessGuardLocation(order, parameters, game),
+            610 => ProcessGuardCharacter(order, parameters, game),
             615 => ProcessAssassinate(order, parameters, game),
             665 => ProcessSabotageBridge(order, parameters),
             670 => ProcessSabotageFort(order, parameters, game),
             675 => ProcessSabotagePort(order, parameters, game),
             680 => ProcessSabotageProduction(order, parameters, game),
-            685 => ProcessStealArtifact(order, parameters),
+            685 => ProcessStealArtifact(order, parameters, game),
             690 => ProcessStealGold(order, parameters, game),
             725 => ProcessNameCharacter(order, parameters, "commander"),
             728 => ProcessNameCharacter(order, parameters, "commander"),
@@ -527,6 +527,8 @@ public class TurnProcessor
 
     private object ProcessChangeTaxRate(Order order, Dictionary<string, JsonElement> parameters)
     {
+        if (!AtCapital(order))
+            return MakeResult(order, "Must be at your own capital", false);
         if (parameters.TryGetValue("newRate", out var newRateEl))
         {
             var newRate = newRateEl.GetInt32();
@@ -538,12 +540,18 @@ public class TurnProcessor
         return MakeResult(order, "Invalid parameters for tax rate", false);
     }
 
-    private object ProcessTransferFoodToArmy(Order order, Dictionary<string, JsonElement> parameters)
+    private object ProcessTransferFoodToArmy(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
         var army = order.Army;
         if (army == null) return MakeResult(order, "No army specified", false);
         if (!parameters.TryGetValue("amount", out var amtEl))
             return MakeResult(order, "No amount specified", false);
+
+        var pc = game.Nations.SelectMany(n => n.PopulationCentres)
+            .FirstOrDefault(p => p.LocationHex == army.LocationHex);
+        if (pc == null || pc.IsHidden || pc.IsSieged
+            || !(pc.NationId == order.NationId || SameOrFriendly(game, order.NationId, pc.NationId)))
+            return MakeResult(order, "Need a non-hidden, non-sieged same or friendly population centre in the hex", false);
 
         var amount = amtEl.GetInt32();
         var actual = Math.Min(amount, order.Nation.Food);
@@ -554,12 +562,18 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessTransferFoodToPC(Order order, Dictionary<string, JsonElement> parameters)
+    private object ProcessTransferFoodToPC(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
         var army = order.Army;
         if (army == null) return MakeResult(order, "No army specified", false);
         if (!parameters.TryGetValue("amount", out var amtEl))
             return MakeResult(order, "No amount specified", false);
+
+        var pc = game.Nations.SelectMany(n => n.PopulationCentres)
+            .FirstOrDefault(p => p.LocationHex == army.LocationHex);
+        if (pc == null || pc.IsHidden || pc.IsSieged
+            || !(pc.NationId == order.NationId || SameOrFriendly(game, order.NationId, pc.NationId)))
+            return MakeResult(order, "Need a non-hidden, non-sieged same or friendly population centre in the hex", false);
 
         var amount = amtEl.GetInt32();
         var actual = Math.Min(amount, army.Food);
@@ -597,6 +611,46 @@ public class TurnProcessor
         "Sword", "Weapon", "Bow", "Mace", "Scimitar", "Hammer", "Lance",
         "Club", "Flail", "Axe", "Bola", "Spear"
     };
+    public static readonly HashSet<string> MovementArtifactTypes = new(StringComparer.OrdinalIgnoreCase) { "Boots" };
+    public static readonly HashSet<string> ScryingArtifactTypes = new(StringComparer.OrdinalIgnoreCase) { "Mirror", "Orb", "Sphere" };
+    public static readonly HashSet<string> HidingArtifactTypes = new(StringComparer.OrdinalIgnoreCase) { "Cloak", "Robes" };
+
+    // Alineamiento del artefacto vs bando de la nación (205/805/935/945).
+    private static bool ArtifactUsableBy(Artifact a, Nation n)
+    {
+        var al = (a.Alignment ?? "").ToLower();
+        if (al is "" or "none" or "neutral") return true;
+        if (al == "good") return n.Allegiance == "free_peoples";
+        if (al == "evil") return n.Allegiance == "dark_servants";
+        return true;
+    }
+
+    // Hex de la capital de la nación (175/180/185/300/325/280/660/725-737...).
+    private static string? CapitalHex(Nation n) =>
+        n.PopulationCentres.FirstOrDefault(p => p.IsCapital)?.LocationHex;
+
+    private static bool AtCapital(Order order) =>
+        CapitalHex(order.Nation) is { } cap && order.Character?.LocationHex == cap;
+
+    // Tierra firme (no agua/océano) para 552/555/745/910/915/925/930.
+    private bool IsLandHex(string gameId, string? hex)
+    {
+        var tile = TileAt(gameId, hex ?? "");
+        return tile != null && tile.Terrain != "water" && tile.Terrain != "ocean";
+    }
+
+    // Fuerzas hostiles (relación <= -1 en algún sentido) en el hex.
+    private static bool EnemyAtHex(Game game, string? hex, string nationId)
+    {
+        if (hex == null) return false;
+        bool Hostile(string a, string b) => game.Nations.FirstOrDefault(n => n.Id == a)?.Relations
+            .FirstOrDefault(r => r.TargetNationId == b)?.Level <= -1;
+        return game.Nations
+            .SelectMany(n => n.Armies.Select(a => new { a.LocationHex, NationId = n.Id })
+                .Concat(n.Navies.Select(v => new { v.LocationHex, NationId = n.Id })))
+            .Any(u => u.LocationHex == hex && u.NationId != nationId
+                && (Hostile(u.NationId, nationId) || Hostile(nationId, u.NationId)));
+    }
 
     // Rango de arma/armadura por material (370/375). Un solo material por orden.
     private static readonly Dictionary<string, int> MaterialRank = new(StringComparer.OrdinalIgnoreCase)
@@ -662,18 +716,32 @@ public class TurnProcessor
 
         var needsMount = troopType is "HeavyCavalry" or "LightCavalry";
 
+        var weaponMat = "bronze";
+        if (parameters.TryGetValue("weapons", out var wEl)) weaponMat = wEl.GetString() ?? weaponMat;
+        var armourMat = "leather";
+        if (parameters.TryGetValue("armour", out var arEl)) armourMat = arEl.GetString() ?? armourMat;
+        if (!MaterialRank.TryGetValue(weaponMat, out var weaponRank))
+            return MakeResult(order, "Weapon material must be leather, bronze, steel or mithril", false);
+        if (!MaterialRank.TryGetValue(armourMat, out var armourRank))
+            return MakeResult(order, "Armour material must be leather, bronze, steel or mithril", false);
+
         var amount = requested;
         if (amount > available) amount = available;
         if (order.Nation.Gold < amount * costPerUnit)
             amount = order.Nation.Gold / costPerUnit;
         if (needsMount && order.Nation.Mounts < amount)
             amount = order.Nation.Mounts;
+        var matUnits = Math.Max(1, (amount + 99) / 100);
+        if (MaterialStock(order.Nation, weaponMat) < matUnits || MaterialStock(order.Nation, armourMat) < matUnits)
+            amount = 0;
         if (amount <= 0)
-            return MakeResult(order, $"Cannot recruit {troopType}: insufficient gold or mounts", false);
+            return MakeResult(order, $"Cannot recruit {troopType}: insufficient gold, mounts or materials", false);
 
         var totalCost = amount * costPerUnit;
         order.Nation.Gold -= totalCost;
         if (needsMount) order.Nation.Mounts -= amount;
+        ConsumeMaterial(order.Nation, weaponMat, matUnits);
+        ConsumeMaterial(order.Nation, armourMat, matUnits);
 
         var existing = CountTroops(order.Army);
         var baseTraining = Math.Max(order.Army.Training, 10);
@@ -689,6 +757,8 @@ public class TurnProcessor
             case "Archers": order.Army.Archers += amount; break;
             case "MenAtArms": order.Army.MenAtArms += amount; break;
         }
+        SetTroopWeaponRank(order.Army, troopType, Math.Max(TroopWeaponRank(order.Army, troopType), weaponRank));
+        SetTroopArmourRank(order.Army, troopType, Math.Max(TroopArmourRank(order.Army, troopType), armourRank));
         var newTotal = existing + amount;
         order.Army.Training = existing == 0
             ? recruitTraining
@@ -697,8 +767,8 @@ public class TurnProcessor
         _recruitsUsed[pc.Id] = used + amount;
 
         order.Status = "resolved";
-        var note = amount < requested ? " (limited by availability/gold)" : "";
-        order.Result = $"Recruited {amount} {troopType} at {pc.Name} for {totalCost} gold{note}";
+        var note = amount < requested ? " (limited by availability/gold/mounts/materials)" : "";
+        order.Result = $"Recruited {amount} {troopType} at {pc.Name} for {totalCost} gold ({weaponMat}/{armourMat} gear, {matUnits} each){note}";
         return MakeResult(order, order.Result);
     }
 
@@ -1311,6 +1381,8 @@ public class TurnProcessor
 
     private object ProcessNationSell(Order order, Dictionary<string, JsonElement> parameters)
     {
+        if (!AtCapital(order))
+            return MakeResult(order, "Must be at your own capital", false);
         if (!parameters.TryGetValue("product", out var pEl) || !IsMarketProduct(pEl.GetString(), out var product))
             return MakeResult(order, "No valid product specified", false);
         var pct = parameters.TryGetValue("percentage", out var pe) ? Math.Clamp(pe.GetInt32(), 0, 100) : 100;
@@ -1338,7 +1410,7 @@ public class TurnProcessor
 
     // â”€â”€ ECONOMÃA EXTRA â”€â”€
 
-    private object ProcessTransferFoodArmyToArmy(Order order, Dictionary<string, JsonElement> parameters)
+    private object ProcessTransferFoodArmyToArmy(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
         var src = order.Army;
         if (src == null) return MakeResult(order, "No source army", false);
@@ -1346,6 +1418,10 @@ public class TurnProcessor
             return MakeResult(order, "Missing targetArmyId or amount", false);
         var tgt = _db.Armies.Find(tgtEl.GetString());
         if (tgt == null) return MakeResult(order, "Target army not found", false);
+        if (tgt.LocationHex != src.LocationHex)
+            return MakeResult(order, "Both armies must be in the same hex", false);
+        if (!SameOrFriendly(game, order.NationId, tgt.NationId))
+            return MakeResult(order, "Target army must be of the same or a friendly nation", false);
         var amount = Math.Min(amtEl.GetInt32(), src.Food);
         src.Food -= amount;
         tgt.Food += amount;
@@ -1447,35 +1523,47 @@ public class TurnProcessor
     private object ProcessUpgradeArmour(Order order, Dictionary<string, JsonElement> parameters)
         => ProcessUpgradeEquipment(order, parameters, isWeapon: false);
 
+    private static readonly Dictionary<string, string> TroopShortKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "hc", "HeavyCavalry" }, { "lc", "LightCavalry" }, { "hi", "HeavyInfantry" },
+        { "li", "LightInfantry" }, { "ar", "Archers" }, { "ma", "MenAtArms" }
+    };
+
+    private static int ParamTroops(Dictionary<string, JsonElement> p, string key)
+    {
+        if (p.TryGetValue(key, out var el) && el.ValueKind == System.Text.Json.JsonValueKind.Number)
+            return Math.Max(0, el.GetInt32());
+        return 0;
+    }
+
     private object ProcessUpgradeEquipment(Order order, Dictionary<string, JsonElement> parameters, bool isWeapon)
     {
         if (order.Army == null) return MakeResult(order, "No army specified", false);
         var kind = isWeapon ? "Weapons" : "Armour";
         var goldCost = isWeapon ? 500 : 600;
 
-        var material = "bronze";
+        var material = isWeapon ? "bronze" : "leather";
         if (parameters.TryGetValue("material", out var matEl)) material = matEl.GetString() ?? material;
         if (!MaterialRank.TryGetValue(material, out var targetRank))
             return MakeResult(order, "Material must be leather, bronze, steel or mithril", false);
 
-        var types = UpgradeableTroopTypes.Where(t => TroopCount(order.Army!, t) > 0).ToList();
-        if (parameters.TryGetValue("troopTypes", out var ttEl) && ttEl.ValueKind == System.Text.Json.JsonValueKind.Array)
-        {
-            var wanted = ttEl.EnumerateArray().Select(e => e.GetString() ?? "").ToHashSet(System.StringComparer.OrdinalIgnoreCase);
-            types = UpgradeableTroopTypes.Where(t => wanted.Contains(t) && TroopCount(order.Army!, t) > 0).ToList();
-        }
-        if (types.Count == 0) return MakeResult(order, $"No troops of the assigned types in {order.Army.Name}", false);
+        var wanted = TroopShortKeys
+            .Where(kv => ParamTroops(parameters, kv.Key) > 0)
+            .Select(kv => kv.Value)
+            .ToList();
+        if (wanted.Count == 0)
+            return MakeResult(order, "Specify troops per type (hc/lc/hi/li/ar/ma)", false);
+        var missing = wanted.Where(t => TroopCount(order.Army!, t) <= 0).ToList();
+        if (missing.Count > 0)
+            return MakeResult(order, $"No {string.Join(", ", missing)} troops in {order.Army.Name}", false);
 
-        var amount = types.Sum(t => TroopCount(order.Army!, t));
-        if (parameters.TryGetValue("amount", out var amtEl)) amount = Math.Max(0, Math.Min(amtEl.GetInt32(), amount));
-        if (amount <= 0) return MakeResult(order, "Amount must be positive", false);
-
+        var amount = wanted.Sum(t => ParamTroops(parameters, TroopShortKeys.First(kv => kv.Value == t).Key));
         var materialUnits = Math.Max(1, (amount + 99) / 100);
         if (order.Nation.Gold < goldCost || MaterialStock(order.Nation, material) < materialUnits)
             return MakeResult(order, $"Insufficient resources: need {goldCost} gold and {materialUnits} {material}", false);
 
         var upgraded = new List<string>();
-        foreach (var t in types)
+        foreach (var t in wanted)
         {
             var current = isWeapon ? TroopWeaponRank(order.Army, t) : TroopArmourRank(order.Army, t);
             if (current >= targetRank) continue;
@@ -1499,14 +1587,20 @@ public class TurnProcessor
     {
         if (order.Army == null) return MakeResult(order, "No army", false);
 
-        if (!parameters.TryGetValue("amount", out var amtEl))
-            return MakeResult(order, "No amount specified", false);
-
-        var amount = amtEl.GetInt32();
-        ReduceTroops(order.Army, amount);
-        order.Nation.Gold += amount * 10;
+        var total = 0;
+        foreach (var kv in TroopShortKeys)
+        {
+            var n = ParamTroops(parameters, kv.Key);
+            if (n <= 0) continue;
+            var have = TroopCount(order.Army, kv.Value);
+            var retire = Math.Min(have, n);
+            SetTroopCount(order.Army, kv.Value, have - retire);
+            total += retire;
+        }
+        if (total <= 0) return MakeResult(order, "No troops retired (amounts per type: hc/lc/hi/li/ar/ma)", false);
+        order.Nation.Gold += total * 10;
         order.Status = "resolved";
-        order.Result = $"Retired {amount} troops for {amount * 10} gold";
+        order.Result = $"Retired {total} troops for {total * 10} gold";
         return MakeResult(order, order.Result);
     }
 
@@ -1571,9 +1665,14 @@ public class TurnProcessor
         if (pc == null)
             return MakeResult(order, "Must be at a population centre you own to forge armour", false);
 
+        var material = "steel";
+        if (parameters.TryGetValue("material", out var matEl)) material = matEl.GetString() ?? material;
+        if (!MaterialRank.TryGetValue(material, out var targetRank) || (material != "leather" && material != "bronze" && material != "steel" && material != "mithril"))
+            return MakeResult(order, "Armour material must be leather, bronze, steel or mithril", false);
+
         var army = order.Army;
-        var maxAdd = Math.Min(amount, 100 - army.HCArmourRank);
-        if (maxAdd <= 0) return MakeResult(order, "Armour already at maximum rank (100)", false);
+        var maxAdd = Math.Min(amount, Math.Max(0, Math.Min(100, targetRank) - army.HCArmourRank));
+        if (maxAdd <= 0) return MakeResult(order, $"Armour already at {material} rank or maximum (100)", false);
 
         var goldCost = maxAdd * 5;
         var leatherCost = maxAdd * 5;
@@ -1591,7 +1690,7 @@ public class TurnProcessor
         army.ArcherArmourRank += maxAdd;
         army.MAAArmourRank += maxAdd;
         order.Status = "resolved";
-        order.Result = $"Improved armour rank by {maxAdd} (now {army.HCArmourRank}) at {pc.Name}";
+        order.Result = $"Improved armour rank by {maxAdd} towards {material} (now {army.HCArmourRank}) at {pc.Name}";
         return MakeResult(order, order.Result);
     }
 
@@ -1607,9 +1706,14 @@ public class TurnProcessor
         if (pc == null)
             return MakeResult(order, "Must be at a population centre you own to forge weapons", false);
 
+        var material = "bronze";
+        if (parameters.TryGetValue("material", out var matEl)) material = matEl.GetString() ?? material;
+        if (!MaterialRank.TryGetValue(material, out var targetRank) || (material != "bronze" && material != "steel" && material != "mithril"))
+            return MakeResult(order, "Weapon material must be bronze, steel or mithril", false);
+
         var army = order.Army;
-        var maxAdd = Math.Min(amount, 100 - army.HCWeaponRank);
-        if (maxAdd <= 0) return MakeResult(order, "Weapons already at maximum rank (100)", false);
+        var maxAdd = Math.Min(amount, Math.Max(0, Math.Min(100, targetRank) - army.HCWeaponRank));
+        if (maxAdd <= 0) return MakeResult(order, $"Weapons already at {material} rank or maximum (100)", false);
 
         var goldCost = maxAdd * 5;
         var bronzeCost = maxAdd * 3;
@@ -1627,7 +1731,7 @@ public class TurnProcessor
         army.ArcherWeaponRank += maxAdd;
         army.MAAWeaponRank += maxAdd;
         order.Status = "resolved";
-        order.Result = $"Improved weapon rank by {maxAdd} (now {army.HCWeaponRank}) at {pc.Name}";
+        order.Result = $"Improved weapon rank by {maxAdd} towards {material} (now {army.HCWeaponRank}) at {pc.Name}";
         return MakeResult(order, order.Result);
     }
 
@@ -1635,6 +1739,11 @@ public class TurnProcessor
 
     private object ProcessCreateCompany(Order order, Dictionary<string, JsonElement> parameters)
     {
+        if (order.Character != null && (order.Character.ArmyId != null || order.Character.CompanyId != null
+            || _db.Navies.Any(v => v.CommanderId == order.Character!.Id)))
+            return MakeResult(order, "Character already commands a force", false);
+        if (order.Character != null && !IsLandHex(order.GameId, order.Character.LocationHex))
+            return MakeResult(order, "Must be on land", false);
         if (!parameters.TryGetValue("name", out var nameEl))
             return MakeResult(order, "No company name specified", false);
 
@@ -1685,18 +1794,25 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessJoinCompany(Order order, Dictionary<string, JsonElement> parameters)
+    private object ProcessJoinCompany(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
-        if (!parameters.TryGetValue("companyId", out var cidEl))
-            return MakeResult(order, "No company ID specified", false);
+        if (!parameters.TryGetValue("commanderId", out var cidEl))
+            return MakeResult(order, "Missing commanderId: join through the company commander", false);
 
-        var companyId = cidEl.GetString();
-        var company = _db.Companies.Find(companyId);
+        var commander = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == cidEl.GetString());
+        if (commander == null || commander.CompanyId == null)
+            return MakeResult(order, "Commander has no company", false);
+        var company = _db.Companies.Find(commander.CompanyId);
         if (company == null)
             return MakeResult(order, "Company not found", false);
+        var members = _db.Characters.Count(c => c.CompanyId == company.Id && !c.IsDead);
+        if (members >= 9)
+            return MakeResult(order, $"Company '{company.Name}' is full (9 members)", false);
+        if (company.NationId != order.NationId && !SameOrFriendly(game, order.NationId, company.NationId))
+            return MakeResult(order, "Company must be of the same or a friendly nation", false);
 
         if (order.Character != null)
-            order.Character.CompanyId = companyId;
+            order.Character.CompanyId = company.Id;
 
         order.Status = "resolved";
         order.Result = $"Joined company '{company.Name}'";
@@ -1708,6 +1824,13 @@ public class TurnProcessor
         if (!parameters.TryGetValue("targetId", out var tEl))
             return MakeResult(order, "Missing targetId", false);
         var target = _db.Characters.Find(tEl.GetString());
+        if (target != null)
+        {
+            if (target.NationId != order.NationId)
+                return MakeResult(order, "New commander must be of the same nation", false);
+            if (target.CommandSkill <= 0)
+                return MakeResult(order, "New commander needs command skill", false);
+        }
         var army = order.Army
                    ?? (parameters.TryGetValue("armyId", out var aEl) ? _db.Armies.Find(aEl.GetString()) : null);
         if (army == null) return MakeResult(order, "No army to transfer command of", false);
@@ -1734,6 +1857,10 @@ public class TurnProcessor
 
         if (target.IsDead || target.IsKidnapped)
             return MakeResult(order, "Target cannot be kidnapped", false);
+        if (target.NationId == order.NationId)
+            return MakeResult(order, "Target must be of a different nation", false);
+        if (target.LocationHex != order.Character?.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
 
         var roll = NationAbilities.AssassinSkill(order.Nation?.Name, order.Character.AgentSkill) + _rng.Next(1, 7);
         var targetDefense = target.CommandSkill / 2 + _rng.Next(1, 7);
@@ -1766,6 +1893,8 @@ public class TurnProcessor
         if (target == null || !target.IsKidnapped)
             return MakeResult(order, "Target not found or not kidnapped", false);
 
+        if (target.LocationHex != order.Character?.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
         target.IsKidnapped = false;
         target.HeldByNationId = null;
         order.Status = "resolved";
@@ -1783,6 +1912,8 @@ public class TurnProcessor
         if (target == null || !target.IsKidnapped)
             return MakeResult(order, "Target not found or not kidnapped", false);
 
+        if (target.LocationHex != order.Character?.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
         var roll = order.Character.AgentSkill + _rng.Next(1, 7);
         var difficulty = 12;
         var success = roll >= difficulty;
@@ -1815,6 +1946,8 @@ public class TurnProcessor
         if (target == null || !target.IsKidnapped)
             return MakeResult(order, "Target not found or not kidnapped", false);
 
+        if (target.LocationHex != order.Character?.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
         var roll = order.Character.AgentSkill + _rng.Next(1, 7);
         var success = roll >= 10;
 
@@ -1844,6 +1977,8 @@ public class TurnProcessor
         if (target == null || !target.IsKidnapped)
             return MakeResult(order, "Target not found or not kidnapped", false);
 
+        if (target.LocationHex != order.Character?.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
         if (order.Army != null && order.Character != null)
             target.LocationHex = order.Army.LocationHex;
 
@@ -1861,6 +1996,8 @@ public class TurnProcessor
         var target = _db.Characters.Find(targetId);
         if (target == null || !target.IsKidnapped)
             return MakeResult(order, "Target not found or not kidnapped", false);
+        if (target.LocationHex != order.Character?.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
 
         target.Health = Math.Max(10, target.Health - 30);
         order.Status = "resolved";
@@ -1875,8 +2012,10 @@ public class TurnProcessor
 
         var targetId = targetEl.GetString();
         var target = _db.Characters.Find(targetId);
-        if (target == null)
-            return MakeResult(order, "Target not found", false);
+        if (target == null || !target.IsKidnapped)
+            return MakeResult(order, "Target not found or not kidnapped", false);
+        if (target.LocationHex != order.Character?.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
 
         target.IsDead = true;
         target.IsKidnapped = false;
@@ -1897,6 +2036,8 @@ public class TurnProcessor
         if (target == null || !target.IsKidnapped)
             return MakeResult(order, "Target not found or not kidnapped", false);
 
+        if (target.LocationHex != order.Character?.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
         if (target.HeldByNationId != order.NationId)
             return MakeResult(order, "Target is not held by your nation", false);
 
@@ -1939,29 +2080,50 @@ public class TurnProcessor
 
     private object ProcessScuttleShips(Order order, Dictionary<string, JsonElement> parameters)
     {
-        if (!parameters.TryGetValue("amount", out var amtEl))
-            return MakeResult(order, "No amount specified", false);
-
-        var amount = amtEl.GetInt32();
         var navy = order.Nation.Navies.FirstOrDefault();
         if (navy == null) return MakeResult(order, "No navy", false);
 
-        var scuttled = Math.Min(amount, navy.Transports);
-        navy.Transports -= scuttled;
+        // Compat: amount solo afectaba a transportes; warships/transports lo sustituyen.
+        var warships = navy.Warships;
+        var transports = navy.Transports;
+        if (parameters.TryGetValue("warships", out var wEl) || parameters.TryGetValue("transports", out var tEl))
+        {
+            warships = parameters.TryGetValue("warships", out var w2) ? Math.Max(0, w2.GetInt32()) : 0;
+            transports = parameters.TryGetValue("transports", out var t2) ? Math.Max(0, t2.GetInt32()) : 0;
+        }
+        else if (parameters.TryGetValue("amount", out var aEl))
+        {
+            warships = 0;
+            transports = Math.Max(0, aEl.GetInt32());
+        }
+        warships = Math.Min(warships, navy.Warships);
+        transports = Math.Min(transports, navy.Transports);
+        navy.Warships -= warships;
+        navy.Transports -= transports;
         order.Status = "resolved";
-        order.Result = $"Scuttled {scuttled} transports";
+        order.Result = $"Scuttled {warships} warships and {transports} transports";
         return MakeResult(order, order.Result);
     }
 
     private object ProcessAbandonShips(Order order, Dictionary<string, JsonElement> parameters)
     {
-        var navy = order.Nation.Navies.FirstOrDefault();
+        if (!AtCapital(order))
+            return MakeResult(order, "Must be at your own capital", false);
+        var hex = order.Character?.LocationHex ?? order.Army?.LocationHex ?? order.Navy?.LocationHex;
+        var navy = order.Nation.Navies.FirstOrDefault(v => hex == null || v.LocationHex == hex) ?? order.Nation.Navies.FirstOrDefault();
         if (navy == null) return MakeResult(order, "No navy", false);
 
-        navy.Warships = 0;
-        navy.Transports = 0;
+        var warships = navy.Warships;
+        var transports = navy.Transports;
+        if (parameters.TryGetValue("warships", out var wEl) || parameters.TryGetValue("transports", out var tEl))
+        {
+            warships = parameters.TryGetValue("warships", out var w2) ? Math.Min(Math.Max(0, w2.GetInt32()), navy.Warships) : 0;
+            transports = parameters.TryGetValue("transports", out var t2) ? Math.Min(Math.Max(0, t2.GetInt32()), navy.Transports) : 0;
+        }
+        navy.Warships -= warships;
+        navy.Transports -= transports;
         order.Status = "resolved";
-        order.Result = "All ships abandoned";
+        order.Result = $"Abandoned {warships} warships and {transports} transports at {navy.LocationHex}";
         return MakeResult(order, order.Result);
     }
 
@@ -2062,10 +2224,15 @@ public class TurnProcessor
 
     private object ProcessUseCombatArtifact(Order order, Dictionary<string, JsonElement> parameters)
     {
-        var artifact = order.Character?.Artifacts
-            .FirstOrDefault(a => a.HeldByCharacterId == order.Character!.Id && CombatArtifactTypes.Contains(a.Type ?? ""));
-        if (artifact == null)
-            return MakeResult(order, "No combat artifact available", false);
+        if (!parameters.TryGetValue("artifactId", out var artEl))
+            return MakeResult(order, "Missing artifactId: choose a held combat artifact", false);
+        var artifact = _db.Artifacts.Find(artEl.GetString());
+        if (artifact == null || artifact.HeldByCharacterId != order.Character?.Id)
+            return MakeResult(order, "Artifact not held by character", false);
+        if (!CombatArtifactTypes.Contains(artifact.Type ?? ""))
+            return MakeResult(order, $"{artifact.Name} is not a combat artifact", false);
+        if (!ArtifactUsableBy(artifact, order.Nation))
+            return MakeResult(order, $"{artifact.Name} alignment does not match your allegiance", false);
 
         order.Character!.CommandSkill += artifact.Bonus;
         order.Status = "resolved";
@@ -2073,61 +2240,105 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
+    private static List<string> IdList(Dictionary<string, JsonElement> p, string key)
+    {
+        var ids = new List<string>();
+        if (!p.TryGetValue(key, out var el)) return ids;
+        void AddEl(System.Text.Json.JsonElement e)
+        {
+            if (e.ValueKind == System.Text.Json.JsonValueKind.String && !string.IsNullOrEmpty(e.GetString()))
+                ids.Add(e.GetString()!);
+            else if (e.ValueKind == System.Text.Json.JsonValueKind.Number && e.TryGetInt32(out var n))
+                ids.Add(n.ToString());
+        }
+        if (el.ValueKind == System.Text.Json.JsonValueKind.Array)
+            foreach (var e in el.EnumerateArray()) AddEl(e);
+        else AddEl(el);
+        return ids;
+    }
+
     private object ProcessTransferArtifact(Order order, Dictionary<string, JsonElement> parameters)
     {
-        if (!parameters.TryGetValue("artifactId", out var artEl) || !parameters.TryGetValue("targetId", out var tgtEl))
-            return MakeResult(order, "Missing artifactId or targetId", false);
+        if (!parameters.TryGetValue("targetId", out var tgtEl))
+            return MakeResult(order, "Missing targetId", false);
+        var ids = IdList(parameters, "artifactId");
+        if (ids.Count == 0)
+            return MakeResult(order, "Missing artifactId(s)", false);
 
-        var artifactId = artEl.GetString();
         var targetId = tgtEl.GetString();
-        var artifact = _db.Artifacts.Find(artifactId);
         var target = _db.Characters.Find(targetId);
+        if (target == null || target.IsKidnapped)
+            return MakeResult(order, "Target not found or is a hostage", false);
+        if (target.LocationHex != order.Character?.LocationHex)
+            return MakeResult(order, "Both characters must be at the same location", false);
 
-        if (artifact == null || target == null)
-            return MakeResult(order, "Artifact or target not found", false);
-
-        artifact.HeldByCharacterId = targetId;
+        var moved = new List<string>();
+        foreach (var artifactId in ids)
+        {
+            var artifact = _db.Artifacts.Find(artifactId);
+            if (artifact == null) continue;
+            artifact.HeldByCharacterId = targetId;
+            moved.Add(artifact.Name);
+        }
+        if (moved.Count == 0) return MakeResult(order, "No artifacts transferred", false);
         order.Status = "resolved";
-        order.Result = $"Transferred {artifact.Name} to {target.Name}";
+        order.Result = $"Transferred {string.Join(", ", moved)} to {target.Name}";
         return MakeResult(order, order.Result);
     }
 
     private object ProcessDropArtifact(Order order, Dictionary<string, JsonElement> parameters)
     {
-        if (!parameters.TryGetValue("artifactId", out var artEl))
-            return MakeResult(order, "No artifact specified", false);
+        var ids = IdList(parameters, "artifactId");
+        if (ids.Count == 0 || ids.Count > 6)
+            return MakeResult(order, "Give 1-6 artifactId(s)", false);
 
-        var artifact = _db.Artifacts.Find(artEl.GetString());
-        if (artifact == null) return MakeResult(order, "Artifact not found", false);
-
-        artifact.HeldByCharacterId = null;
-        artifact.LocationHex = order.Character?.LocationHex;
+        var dropped = new List<string>();
+        foreach (var artifactId in ids)
+        {
+            var artifact = _db.Artifacts.Find(artifactId);
+            if (artifact == null) continue;
+            artifact.HeldByCharacterId = null;
+            artifact.LocationHex = order.Character?.LocationHex;
+            dropped.Add(artifact.Name);
+        }
+        if (dropped.Count == 0) return MakeResult(order, "No artifacts dropped", false);
         order.Status = "resolved";
-        order.Result = $"Dropped {artifact.Name}";
+        order.Result = $"Dropped {string.Join(", ", dropped)}";
         return MakeResult(order, order.Result);
     }
 
     private object ProcessPickUpArtifact(Order order, Dictionary<string, JsonElement> parameters)
     {
-        if (!parameters.TryGetValue("artifactId", out var artEl))
-            return MakeResult(order, "No artifact specified", false);
+        var ids = IdList(parameters, "artifactId");
+        if (ids.Count == 0 || ids.Count > 6)
+            return MakeResult(order, "Give 1-6 artifactId(s)", false);
 
-        var artifact = _db.Artifacts.Find(artEl.GetString());
-        if (artifact == null) return MakeResult(order, "Artifact not found", false);
-
-        if (order.Character != null)
-            artifact.HeldByCharacterId = order.Character.Id;
-
+        var picked = new List<string>();
+        foreach (var artifactId in ids)
+        {
+            var artifact = _db.Artifacts.Find(artifactId);
+            if (artifact == null) continue;
+            if (order.Character != null)
+                artifact.HeldByCharacterId = order.Character.Id;
+            picked.Add(artifact.Name);
+        }
+        if (picked.Count == 0) return MakeResult(order, "No artifacts picked up", false);
         order.Status = "resolved";
-        order.Result = $"Picked up {artifact.Name}";
+        order.Result = $"Picked up {string.Join(", ", picked)}";
         return MakeResult(order, order.Result);
     }
 
     private object ProcessUseMovementArtifact(Order order, Dictionary<string, JsonElement> parameters)
     {
-        var artifact = order.Character?.Artifacts.FirstOrDefault(a => a.Type == "movement");
-        if (artifact == null)
-            return MakeResult(order, "No movement artifact available", false);
+        if (!parameters.TryGetValue("artifactId", out var artEl))
+            return MakeResult(order, "Missing artifactId: choose a held movement artifact", false);
+        var artifact = _db.Artifacts.Find(artEl.GetString());
+        if (artifact == null || artifact.HeldByCharacterId != order.Character?.Id)
+            return MakeResult(order, "Artifact not held by character", false);
+        if (!MovementArtifactTypes.Contains(artifact.Type ?? ""))
+            return MakeResult(order, $"{artifact.Name} is not a movement artifact", false);
+        if (!ArtifactUsableBy(artifact, order.Nation))
+            return MakeResult(order, $"{artifact.Name} alignment does not match your allegiance", false);
 
         if (parameters.TryGetValue("destination", out var destEl))
         {
@@ -2173,20 +2384,34 @@ public class TurnProcessor
 
     private object ProcessUseScryingArtifact(Order order, Dictionary<string, JsonElement> parameters)
     {
-        var artifact = order.Character?.Artifacts.FirstOrDefault(a => a.Type == "scrying");
-        if (artifact == null)
-            return MakeResult(order, "No scrying artifact available", false);
+        if (!parameters.TryGetValue("artifactId", out var artEl))
+            return MakeResult(order, "Missing artifactId: choose a held scrying artifact", false);
+        var artifact = _db.Artifacts.Find(artEl.GetString());
+        if (artifact == null || artifact.HeldByCharacterId != order.Character?.Id)
+            return MakeResult(order, "Artifact not held by character", false);
+        if (!ScryingArtifactTypes.Contains(artifact.Type ?? ""))
+            return MakeResult(order, $"{artifact.Name} is not a scrying artifact", false);
+        if (!ArtifactUsableBy(artifact, order.Nation))
+            return MakeResult(order, $"{artifact.Name} alignment does not match your allegiance", false);
 
+        var hex = parameters.TryGetValue("hex", out var hEl) ? hEl.GetString() : order.Character?.LocationHex;
+        var scryHex = parameters.TryGetValue("hex", out var sHex) ? sHex.GetString() : order.Character?.LocationHex;
         order.Status = "resolved";
-        order.Result = $"Used {artifact.Name}: scrying active";
+        order.Result = $"Used {artifact.Name}: scrying {scryHex} active";
         return MakeResult(order, order.Result);
     }
 
     private object ProcessUseHidingArtifact(Order order, Dictionary<string, JsonElement> parameters)
     {
-        var artifact = order.Character?.Artifacts.FirstOrDefault(a => a.Type == "hiding");
-        if (artifact == null)
-            return MakeResult(order, "No hiding artifact available", false);
+        if (!parameters.TryGetValue("artifactId", out var artEl))
+            return MakeResult(order, "Missing artifactId: choose a held hiding artifact", false);
+        var artifact = _db.Artifacts.Find(artEl.GetString());
+        if (artifact == null || artifact.HeldByCharacterId != order.Character?.Id)
+            return MakeResult(order, "Artifact not held by character", false);
+        if (!HidingArtifactTypes.Contains(artifact.Type ?? ""))
+            return MakeResult(order, $"{artifact.Name} is not a hiding artifact", false);
+        if (!ArtifactUsableBy(artifact, order.Nation))
+            return MakeResult(order, $"{artifact.Name} alignment does not match your allegiance", false);
 
         if (order.Character != null)
             order.Character.Stealth += 10;
@@ -2247,12 +2472,13 @@ public class TurnProcessor
         switch (enc.Type)
         {
             case "artifact":
+                var foundTypes = CombatArtifactTypes.ToArray();
                 _db.Artifacts.Add(new Artifact
                 {
                     Id = Guid.NewGuid().ToString(),
                     NationId = order.NationId,
                     Name = "Recovered Artifact",
-                    Type = "combat",
+                    Type = foundTypes[_rng.Next(foundTypes.Length)],
                     Alignment = "none",
                     Bonus = _rng.Next(100, 500),
                     IsAtCapital = false,
@@ -2295,7 +2521,7 @@ public class TurnProcessor
         return MakeResult(order, enc.Result);
     }
 
-    private object ProcessTransferHostage(Order order, Dictionary<string, JsonElement> parameters)
+    private object ProcessTransferHostage(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
         if (!parameters.TryGetValue("targetId", out var tgtEl))
             return MakeResult(order, "No target specified", false);
@@ -2303,17 +2529,29 @@ public class TurnProcessor
         var target = _db.Characters.Find(tgtEl.GetString());
         if (target == null || !target.IsKidnapped)
             return MakeResult(order, "Target not found or not kidnapped", false);
+        if (target.LocationHex != order.Character?.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
+        var receiver = parameters.TryGetValue("receiverId", out var rEl)
+            ? game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == rEl.GetString()) : null;
+        if (receiver != null)
+        {
+            if (receiver.LocationHex != order.Character?.LocationHex)
+                return MakeResult(order, "Receiver must be at the same location", false);
+            target.HeldByNationId = receiver.NationId;
+        }
 
         if (order.Character != null)
             target.LocationHex = order.Character.LocationHex;
 
         order.Status = "resolved";
-        order.Result = $"Transferred hostage {target.Name}";
+        order.Result = $"Transferred hostage {target.Name}" + (receiver != null ? $" to {receiver.Name}" : "");
         return MakeResult(order, order.Result);
     }
 
     private object ProcessOfferRansom(Order order, Dictionary<string, JsonElement> parameters)
     {
+        if (!AtCapital(order))
+            return MakeResult(order, "Must be at your own capital", false);
         if (!parameters.TryGetValue("targetId", out var tgtEl))
             return MakeResult(order, "No target specified", false);
 
@@ -2334,6 +2572,7 @@ public class TurnProcessor
     private object ProcessRetireCharacter(Order order, Dictionary<string, JsonElement> parameters)
     {
         if (order.Character == null) return MakeResult(order, "No character", false);
+        if (order.Character.IsKidnapped) return MakeResult(order, "Cannot retire a hostage", false);
 
         order.Character.IsDead = true;
         order.Character.Health = 0;
@@ -2353,9 +2592,20 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessSplitArmy(Order order, Dictionary<string, JsonElement> parameters)
+    private object ProcessSplitArmy(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
         if (order.Army == null) return MakeResult(order, "No army to split", false);
+        if (!parameters.TryGetValue("commanderId", out var cmdEl))
+            return MakeResult(order, "Missing commanderId for the new army", false);
+        var newBoss = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == cmdEl.GetString());
+        if (newBoss == null || newBoss.IsDead) return MakeResult(order, "New commander not found", false);
+        if (newBoss.NationId != order.NationId) return MakeResult(order, "New commander must be of the same nation", false);
+        if (newBoss.CommandSkill <= 0) return MakeResult(order, "New commander needs command skill", false);
+        if (newBoss.ArmyId != null || newBoss.CompanyId != null
+            || game.Nations.SelectMany(n => n.Navies).Any(v => v.CommanderId == newBoss.Id))
+            return MakeResult(order, $"{newBoss.Name} already commands a force", false);
+        if (newBoss.LocationHex != order.Army.LocationHex)
+            return MakeResult(order, "New commander must be at the same hex", false);
 
         var splitRatio = 0.5;
         var newArmy = new Army
@@ -2382,7 +2632,8 @@ public class TurnProcessor
             ArcherArmourRank = order.Army.ArcherArmourRank,
             MAAWeaponRank = order.Army.MAAWeaponRank,
             MAAArmourRank = order.Army.MAAArmourRank,
-            Morale = order.Army.Morale
+            Morale = order.Army.Morale,
+            CommanderId = newBoss.Id
         };
 
         order.Army.HeavyCavalry -= newArmy.HeavyCavalry;
@@ -2391,29 +2642,40 @@ public class TurnProcessor
         order.Army.LightInfantry -= newArmy.LightInfantry;
         order.Army.Archers -= newArmy.Archers;
         order.Army.MenAtArms -= newArmy.MenAtArms;
+        newBoss.ArmyId = newArmy.Id;
 
         _db.Armies.Add(newArmy);
         order.Status = "resolved";
-        order.Result = $"Army split: {newArmy.Name} created";
+        order.Result = $"Army split: {newArmy.Name} created under {newBoss.Name}";
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessJoinArmy(Order order, Dictionary<string, JsonElement> parameters)
+    private object ProcessJoinArmy(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
-        if (!parameters.TryGetValue("armyId", out var armyEl))
-            return MakeResult(order, "No army specified", false);
+        if (order.Character != null && (order.Character.ArmyId != null || order.Character.CompanyId != null
+            || game.Nations.SelectMany(n => n.Navies).Any(v => v.CommanderId == order.Character!.Id)))
+            return MakeResult(order, "Character already commands a force", false);
+        if (!parameters.TryGetValue("commanderId", out var cmdEl))
+            return MakeResult(order, "Missing commanderId of the force to join", false);
 
-        var army = _db.Armies.Find(armyEl.GetString());
-        if (army == null) return MakeResult(order, "Army not found", false);
+        var boss = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == cmdEl.GetString());
+        if (boss == null || boss.IsDead) return MakeResult(order, "Commander not found", false);
+        if (boss.NationId != order.NationId) return MakeResult(order, "Can only join a force of your own nation", false);
+        var army = game.Nations.SelectMany(n => n.Armies).FirstOrDefault(a => a.CommanderId == boss.Id);
+        var navy = army == null ? game.Nations.SelectMany(n => n.Navies).FirstOrDefault(v => v.CommanderId == boss.Id) : null;
+        if (army == null && navy == null) return MakeResult(order, $"{boss.Name} commands no force", false);
+        var hex = army?.LocationHex ?? navy!.LocationHex;
+        if (hex != order.Character?.LocationHex)
+            return MakeResult(order, "Force to join must be at the same hex", false);
 
         if (order.Character != null)
         {
-            order.Character.ArmyId = army.Id;
-            order.Character.LocationHex = army.LocationHex;
+            order.Character.ArmyId = army?.Id;
+            order.Character.LocationHex = hex;
         }
 
         order.Status = "resolved";
-        order.Result = $"Joined army {army.Name}";
+        order.Result = $"Joined {(army != null ? "army" : "navy")} of {boss.Name} at {hex}";
         return MakeResult(order, order.Result);
     }
 
@@ -2490,6 +2752,18 @@ public class TurnProcessor
 
     private object ProcessOneRing(Order order, Dictionary<string, JsonElement> parameters)
     {
+        if (order.Nation.Allegiance == "neutral")
+            return MakeResult(order, "Neutral nations cannot wield the One Ring", false);
+        if (order.Character?.ArmyId != null || order.Character?.CompanyId != null
+            || (order.Character != null && _db.Navies.Any(v => v.CommanderId == order.Character.Id)))
+            return MakeResult(order, "Bearer must travel alone (no army, company or navy)", false);
+        if ((order.Character?.LocationHex ?? "") != "34,23")
+            return MakeResult(order, "The bearer must be at Mount Doom (34,23)", false);
+        var bearerArt = order.Character == null ? null :
+            _db.Artifacts.FirstOrDefault(a => a.HeldByCharacterId == order.Character.Id
+                && (a.Id == "14" || (a.Name ?? "").Contains("One Ring", StringComparison.OrdinalIgnoreCase)));
+        if (bearerArt == null)
+            return MakeResult(order, "Bearer must possess artifact #14 The One Ring", false);
         var roll = _rng.Next(1, 7);
         var success = roll >= 6;
         order.Status = "resolved";
@@ -2520,11 +2794,21 @@ public class TurnProcessor
             var target = _db.Characters.Find(tgtEl.GetString());
             if (target != null)
             {
-                var healAmount = _rng.Next(20, 50);
-                target.Health = Math.Min(target.MaxHealth, target.Health + healAmount);
+                if (target.LocationHex != order.Character!.LocationHex)
+                {
+                    order.Status = "resolved";
+                    order.Result = $"Heal fizzles: {target.Name} is not at the same location (proficiency still improves)";
+                }
+                else
+                {
+                    var healAmount = _rng.Next(20, 50);
+                    target.Health = Math.Min(target.MaxHealth, target.Health + healAmount);
+                    order.Status = "resolved";
+                    order.Result = $"Heal successful (roll {roll}): {target.Name} healed {healAmount} HP (+1 mage skill)";
+                }
                 order.Character.MageSkill = Math.Min(100, order.Character.MageSkill + 1);
-                order.Status = "resolved";
-                order.Result = $"Heal successful (roll {roll}): {target.Name} healed {healAmount} HP (+1 mage skill)";
+                var spell = order.Character.Spells.FirstOrDefault(s => s.SpellId == def.Id && s.IsKnown && !s.IsLost);
+                if (spell != null) spell.Rank = Math.Min(100, spell.Rank + _rng.Next(1, 6));
                 return MakeResult(order, order.Result);
             }
         }
@@ -2593,6 +2877,10 @@ public class TurnProcessor
     private object ProcessResearchSpell(Order order, Dictionary<string, JsonElement> parameters)
     {
         if (order.Character == null) return MakeResult(order, "No mage for research", false);
+        if (OwnedPCAt(order.Character.LocationHex, order.NationId) == null)
+            return MakeResult(order, "Must be at one of your population centres to research", false);
+        if (order.Character.Spells.Count(s => s.IsKnown && !s.IsLost) >= 15)
+            return MakeResult(order, "Already knows 15 spells", false);
 
         // Hechizo objetivo: parámetro spellId o uno aleatorio aún no conocido.
         // Los perdidos exigen acceso nacional (LOST_SPELL_<id>).
@@ -2638,31 +2926,30 @@ public class TurnProcessor
     {
         if (order.Character == null) return MakeResult(order, "No mage", false);
 
-        Spell? toForget = null;
-        if (parameters.TryGetValue("spellId", out var sidEl))
+        var ids = IdList(parameters, "spellId");
+        if (ids.Count == 0 || ids.Count > 6)
+            return MakeResult(order, "Give 1-6 spellId(s) to forget", false);
+        var forgotten = new List<string>();
+        foreach (var idStr in ids)
         {
-            toForget = order.Character.Spells
-                .FirstOrDefault(s => s.SpellId == sidEl.GetInt32() && s.IsKnown && !s.IsLost);
+            if (!int.TryParse(idStr, out var sid)) continue;
+            var known = order.Character.Spells.FirstOrDefault(s => s.SpellId == sid && s.IsKnown && !s.IsLost);
+            if (known == null) continue;
+            known.IsLost = true;
+            known.IsKnown = false;
+            forgotten.Add(SpellCatalog.Get(sid)?.Name ?? $"Spell {sid}");
         }
-        else
-        {
-            toForget = order.Character.Spells
-                .FirstOrDefault(s => s.IsKnown && !s.IsLost);
-        }
-
-        if (toForget == null)
-            return MakeResult(order, "No spell to forget");
-
-        toForget.IsLost = true;
-        toForget.IsKnown = false;
-        var def = SpellCatalog.Get(toForget.SpellId);
+        if (forgotten.Count == 0)
+            return MakeResult(order, "No known spells matched", false);
         order.Status = "resolved";
-        order.Result = $"Forgot {def?.Name ?? "spell"}";
+        order.Result = $"Forgot {string.Join(", ", forgotten)}";
         return MakeResult(order, order.Result);
     }
 
     private object ProcessPrenticeMagery(Order order, Dictionary<string, JsonElement> parameters)
     {
+        if (order.Character != null && OwnedPCAt(order.Character.LocationHex, order.NationId) == null)
+            return MakeResult(order, "Must be at one of your population centres to train", false);
         var roll = order.Character?.MageSkill + _rng.Next(1, 7) ?? 8;
         var success = roll >= 12;
 
@@ -2704,7 +2991,38 @@ public class TurnProcessor
 
         order.Character.MageSkill = Math.Min(100, order.Character.MageSkill + 1);
 
-        // Revelar ejÃ©rcitos enemigos en el hex indicado (o el del lanzador)
+        if (parameters.TryGetValue("targetId", out var tgtEl))
+        {
+            var tgt = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == tgtEl.GetString());
+            if (tgt == null) return MakeResult(order, "Target character not found", false);
+            order.Status = "resolved";
+            order.Result = $"Scry reveals {tgt.Name} ({tgt.Type}) of {tgt.Nation?.Name ?? "?"} at {tgt.LocationHex}, health {tgt.Health}, challenge {tgt.ChallengeRank}";
+            return MakeResult(order, order.Result);
+        }
+        if (parameters.TryGetValue("nationId", out var natEl))
+        {
+            var nat = game.Nations.FirstOrDefault(n => n.Id == natEl.GetString());
+            if (nat == null) return MakeResult(order, "Nation not found", false);
+            order.Status = "resolved";
+            order.Result = $"Scry reveals {nat.Name}: {nat.PopulationCentres.Count} centres, " +
+                $"{nat.Armies.Sum(a => a.HeavyCavalry + a.LightCavalry + a.HeavyInfantry + a.LightInfantry + a.Archers + a.MenAtArms)} troops, " +
+                $"{nat.Characters.Count(c => !c.IsDead)} characters, gold {nat.Gold}";
+            return MakeResult(order, order.Result);
+        }
+        if (parameters.TryGetValue("artifactId", out var artEl))
+        {
+            var art = _db.Artifacts.Find(artEl.GetString());
+            if (art == null) return MakeResult(order, "Artifact not found", false);
+            var holder = art.HeldByCharacterId == null ? null :
+                game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == art.HeldByCharacterId);
+            order.Status = "resolved";
+            order.Result = holder != null
+                ? $"Scry locates {art.Name} held by {holder.Name} ({holder.Nation?.Name}) at {holder.LocationHex}"
+                : $"Scry locates {art.Name} at {art.LocationHex ?? "unknown"}";
+            return MakeResult(order, order.Result);
+        }
+
+        // Revelar ejércitos enemigos en el hex indicado (o el del lanzador)
         var hex = order.Character.LocationHex;
         if (parameters.TryGetValue("hex", out var hexEl)) hex = hexEl.GetString() ?? hex;
 
@@ -2757,19 +3075,28 @@ public class TurnProcessor
 
     // â”€â”€ EMISSARY EXTRA â”€â”€
 
-    // 500: espía en UNA nación (targetNationId). Solo un activo por nación y turno.
-    private object ProcessRecruitDoubleAgent(Order order, Dictionary<string, JsonElement> parameters)
+    // 500: espía en UNA nación a través de un personaje objetivo con skill e/a
+    // en el mismo hex. Solo un activo por nación y turno (GameEvent).
+    private object ProcessRecruitDoubleAgent(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
         if (order.Character == null) return MakeResult(order, "No character", false);
-        if (!parameters.TryGetValue("targetNationId", out var natEl))
-            return MakeResult(order, "Missing targetNationId: double agents operate in a single nation", false);
-        var targetNationId = natEl.GetString();
-        var targetNation = _db.Nations.FirstOrDefault(n => n.Id == targetNationId && n.GameId == order.GameId);
+        if (order.Character.EmissarySkill <= 0)
+            return MakeResult(order, "Needs emissary skill", false);
+        if (!parameters.TryGetValue("targetId", out var tgtEl))
+            return MakeResult(order, "Missing targetId: double agents are recruited through a character", false);
+        var target = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == tgtEl.GetString());
+        if (target == null || target.IsDead) return MakeResult(order, "Target not found", false);
+        if (target.EmissarySkill <= 0 && target.AgentSkill <= 0)
+            return MakeResult(order, $"{target.Name} has no emissary or agent skill", false);
+        if (target.LocationHex != order.Character.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
+        if (target.NationId == order.NationId)
+            return MakeResult(order, "Cannot plant a double agent in your own nation", false);
+        var targetNation = game.Nations.FirstOrDefault(n => n.Id == target.NationId);
         if (targetNation == null) return MakeResult(order, "Target nation not found", false);
-        if (targetNationId == order.NationId) return MakeResult(order, "Cannot plant a double agent in your own nation", false);
 
         var existing = _db.GameEvents.FirstOrDefault(e => e.GameId == order.GameId
-            && e.Type == "double_agent" && e.Data.Contains(targetNationId!));
+            && e.Type == "double_agent" && e.Data.Contains(target.NationId));
         if (existing != null)
             return MakeResult(order, $"Already have a double agent in {targetNation.Name}", false);
 
@@ -2788,9 +3115,9 @@ public class TurnProcessor
             GameId = order.GameId,
             TurnId = order.TurnId,
             Type = "double_agent",
-            Data = $"{{\"nationId\":\"{targetNationId}\",\"characterId\":\"{order.Character.Id}\"}}"
+            Data = $"{{\"nationId\":\"{target.NationId}\",\"characterId\":\"{target.Id}\",\"by\":\"{order.Character.Id}\"}}"
         });
-        order.Result = $"Double agent recruited in {targetNation.Name} (roll {roll})";
+        order.Result = $"Double agent recruited in {targetNation.Name} via {target.Name} (roll {roll})";
         return MakeResult(order, order.Result);
     }
 
@@ -2805,8 +3132,11 @@ public class TurnProcessor
         var target = _db.Characters.Include(c => c.Nation).FirstOrDefault(c => c.Id == tgtEl.GetString());
         if (target == null) return MakeResult(order, "Target not found", false);
         if (target.NationId == order.NationId) return MakeResult(order, "Cannot bribe your own character", false);
+        if (target.IsKidnapped) return MakeResult(order, "Cannot bribe a hostage", false);
         if (order.Character == null || order.Character.EmissarySkill <= 0)
             return MakeResult(order, "Needs emissary skill", false);
+        if (target.LocationHex != order.Character.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
 
         var amount = 500;
         if (parameters.TryGetValue("amount", out var amtEl)) amount = Math.Max(500, amtEl.GetInt32());
@@ -2847,8 +3177,17 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessImproveHarbour(Order order, Dictionary<string, JsonElement> parameters)
+    private object ProcessImproveHarbour(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
+        var hex = order.Character?.LocationHex ?? order.Army?.LocationHex;
+        var pc = hex == null ? null : OwnedPCAt(hex, order.NationId);
+        if (pc == null) return MakeResult(order, "Must be at one of your population centres", false);
+        if (!pc.HasHarbour || pc.HasPort)
+            return MakeResult(order, $"{pc.Name} needs a harbour (not yet a port)", false);
+        if (pc.Size != "major town" && pc.Size != "city")
+            return MakeResult(order, "Only major towns and cities can have ports", false);
+        if (EnemyAtHex(game, hex, order.NationId))
+            return MakeResult(order, "Enemy forces present", false);
         // Derivado de la tabla: puerto menos puerto (4000/7500 - 2500/5000).
         const int goldCost = 1500;
         const int timberCost = 2500;
@@ -2861,17 +3200,24 @@ public class TurnProcessor
 
         order.Nation.Gold -= goldCost;
         order.Nation.Timber -= timberCost;
+        pc.HasPort = true;
         order.Status = "resolved";
-        order.Result = $"Harbour improved to port for {goldCost} gold and {timberCost} timber";
+        order.Result = $"Harbour at {pc.Name} improved to port for {goldCost} gold and {timberCost} timber";
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessAddHarbour(Order order, Dictionary<string, JsonElement> parameters)
+    private object ProcessAddHarbour(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
         var hex = order.Character?.LocationHex ?? order.Army?.LocationHex;
         if (hex == null) return MakeResult(order, "No location", false);
         var pc = OwnedPCAt(hex, order.NationId);
         if (pc == null) return MakeResult(order, "Must be at your own population centre", false);
+        if (pc.HasHarbour || pc.HasPort)
+            return MakeResult(order, $"{pc.Name} already has a harbour or port", false);
+        if (pc.Size != "town" && pc.Size != "major town" && pc.Size != "city")
+            return MakeResult(order, "Only towns and larger can have harbours", false);
+        if (EnemyAtHex(game, hex, order.NationId))
+            return MakeResult(order, "Enemy forces present", false);
         // Reglamento: puerto 2500 oro + 5000 madera.
         const int goldCost = 2500;
         const int timberCost = 5000;
@@ -2885,12 +3231,16 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessImprovePC(Order order, Dictionary<string, JsonElement> parameters)
+    private object ProcessImprovePC(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
         var hex = order.Character?.LocationHex ?? order.Army?.LocationHex;
         if (hex == null) return MakeResult(order, "No location", false);
         var pc = OwnedPCAt(hex, order.NationId);
         if (pc == null) return MakeResult(order, "Must be at your own population centre to improve it", false);
+        if (pc.Size == "city" || pc.Size == "citadel")
+            return MakeResult(order, $"{pc.Name} cannot be improved further", false);
+        if (EnemyAtHex(game, hex, order.NationId))
+            return MakeResult(order, "Enemy forces present", false);
         // Reglamento: coste de subida según tamaño (camp 2000 … city 10000).
         int cost = pc.Size.ToLower() switch
         {
@@ -2920,10 +3270,14 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessCreateCamp(Order order, Dictionary<string, JsonElement> parameters)
+    private object ProcessCreateCamp(Order order, Dictionary<string, JsonElement> parameters, Game game)
     {
         var hex = order.Character?.LocationHex ?? order.Army?.LocationHex;
         if (hex == null) return MakeResult(order, "No location for camp", false);
+        if (!IsLandHex(order.GameId, hex))
+            return MakeResult(order, "Camps need a land hex", false);
+        if (EnemyAtHex(game, hex, order.NationId))
+            return MakeResult(order, "Enemy forces present", false);
         // Reglamento: crear campamento 2000 oro.
         const int cost = 2000;
         if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
@@ -2984,6 +3338,10 @@ public class TurnProcessor
         if (hex == null) return MakeResult(order, "No location", false);
         var pc = PCAtHex(hex);
         if (pc == null) return MakeResult(order, "No population centre at location", false);
+        if (pc.NationId != order.NationId)
+            return MakeResult(order, "Can only reduce your own population centres", false);
+        if (pc.Size.ToLower() == "camp")
+            return MakeResult(order, "Camps cannot be reduced further (abandon them)", false);
         var idx = Array.IndexOf(SizeOrder, pc.Size.ToLower());
         if (idx > 0) pc.Size = SizeOrder[idx - 1];
         pc.Loyalty = Math.Max(0, pc.Loyalty - 20);
@@ -3086,6 +3444,8 @@ public class TurnProcessor
 
     private object ProcessSkillOrder(Order order, string skillType, Dictionary<string, JsonElement> parameters)
     {
+        if ((order.Code is 910 or 915 or 925) && !IsLandHex(order.GameId, order.Character?.LocationHex))
+            return MakeResult(order, "Must be on land", false);
         var skill = (skillType, order.Code) switch
         {
             ("Command", 925) => NationAbilities.ScoutSkill(order.Nation?.Name, 925, order.Character.AgentSkill, order.Character.CommandSkill),
@@ -3141,6 +3501,10 @@ public class TurnProcessor
         var allegiance = (el.GetString() ?? "").ToLower();
         if (allegiance != "free_peoples" && allegiance != "dark_servants" && allegiance != "neutral")
             return MakeResult(order, "Allegiance must be free_peoples, dark_servants or neutral", false);
+        if (order.Nation.Allegiance != "neutral")
+            return MakeResult(order, "Only neutral nations can change allegiance", false);
+        if (!AtCapital(order))
+            return MakeResult(order, "Must be at your own capital", false);
         order.Nation.Allegiance = allegiance;
         order.Status = "resolved";
         order.Result = $"Allegiance changed to {order.Nation.Allegiance}";
@@ -3149,6 +3513,8 @@ public class TurnProcessor
 
     private object ProcessUpgradeRelations(Order order, Dictionary<string, JsonElement> p)
     {
+        if (!AtCapital(order))
+            return MakeResult(order, "Must be at your own capital", false);
         if (!p.TryGetValue("nationId", out var nid)) return MakeResult(order, "Missing nationId", false);
         var tid = nid.GetString()!;
         var rel = order.Nation.Relations.FirstOrDefault(r => r.TargetNationId == tid);
@@ -3164,6 +3530,8 @@ public class TurnProcessor
 
     private object ProcessDowngradeRelations(Order order, Dictionary<string, JsonElement> p)
     {
+        if (!AtCapital(order))
+            return MakeResult(order, "Must be at your own capital", false);
         if (!p.TryGetValue("nationId", out var nid)) return MakeResult(order, "Missing nationId", false);
         var tid = nid.GetString()!;
         var rel = order.Nation.Relations.FirstOrDefault(r => r.TargetNationId == tid);
@@ -3346,13 +3714,25 @@ public class TurnProcessor
     private object ProcessTransferArmour(Order order, Dictionary<string, JsonElement> p, Game game) => TransferBetweenArmies(order, p, game, "armour");
     private object ProcessTransferTroops(Order order, Dictionary<string, JsonElement> p, Game game) => TransferBetweenArmies(order, p, game, "troops");
 
+    private static bool SameOrFriendly(Game game, string myNationId, string otherNationId)
+    {
+        if (myNationId == otherNationId) return true;
+        var rel = game.Nations.FirstOrDefault(n => n.Id == myNationId)?.Relations
+            .FirstOrDefault(r => r.TargetNationId == otherNationId);
+        return (rel?.Level ?? 0) >= 1;
+    }
+
     private object TransferBetweenArmies(Order order, Dictionary<string, JsonElement> p, Game game, string kind)
     {
         if (order.Army == null) return MakeResult(order, "No source army", false);
-        if (!p.TryGetValue("destArmyId", out var dEl) || !p.TryGetValue("amount", out var aEl))
-            return MakeResult(order, "Need destArmyId and amount", false);
+        if ((!p.TryGetValue("targetArmyId", out var dEl) && !p.TryGetValue("destArmyId", out dEl)) || !p.TryGetValue("amount", out var aEl))
+            return MakeResult(order, "Need targetArmyId and amount", false);
         var dest = GetArmyById(game, dEl.GetString()!);
         if (dest == null) return MakeResult(order, "Dest army not found", false);
+        if (dest.LocationHex != order.Army.LocationHex)
+            return MakeResult(order, "Both armies must be in the same hex", false);
+        if (!SameOrFriendly(game, order.NationId, dest.NationId))
+            return MakeResult(order, "Dest army must be of the same or a friendly nation", false);
         var amt = Math.Max(0, aEl.GetInt32());
         switch (kind)
         {
@@ -3379,14 +3759,33 @@ public class TurnProcessor
                 amt = aAmt;
                 break;
             case "troops":
-                var hc = Math.Min(order.Army.HeavyCavalry, amt); order.Army.HeavyCavalry -= hc; dest.HeavyCavalry += hc;
-                var rest = amt - hc;
-                var li = Math.Min(order.Army.LightInfantry, rest); order.Army.LightInfantry -= li; dest.LightInfantry += li;
-                amt = hc + li;
+                var moved = 0;
+                foreach (var t in UpgradeableTroopTypes)
+                {
+                    if (moved >= amt) break;
+                    var take = Math.Min(TroopCount(order.Army, t), amt - moved);
+                    SetTroopCount(order.Army, t, TroopCount(order.Army, t) - take);
+                    SetTroopCount(dest, t, TroopCount(dest, t) + take);
+                    moved += take;
+                }
+                amt = moved;
                 break;
         }
         order.Status = "resolved"; order.Result = $"Transferred {amt} {kind} to {dest.Name}";
         return MakeResult(order, order.Result);
+    }
+
+    private static void SetTroopCount(Army army, string type, int value)
+    {
+        switch (type)
+        {
+            case "HeavyCavalry": army.HeavyCavalry = value; break;
+            case "LightCavalry": army.LightCavalry = value; break;
+            case "HeavyInfantry": army.HeavyInfantry = value; break;
+            case "LightInfantry": army.LightInfantry = value; break;
+            case "Archers": army.Archers = value; break;
+            case "MenAtArms": army.MenAtArms = value; break;
+        }
     }
 
     private object ProcessTransferShips(Order order, Dictionary<string, JsonElement> p)
@@ -3399,6 +3798,9 @@ public class TurnProcessor
     {
         var pc = ResolvePC(order, p, game);
         if (pc == null) return MakeResult(order, "No population centre", false);
+        if (pc.NationId != order.NationId)
+            return MakeResult(order, "Can only remove your own harbour", false);
+        if (!pc.HasHarbour) return MakeResult(order, $"{pc.Name} has no harbour", false);
         pc.HasHarbour = false;
         order.Status = "resolved"; order.Result = $"Harbour removed from {pc.Name}";
         return MakeResult(order, order.Result);
@@ -3408,6 +3810,9 @@ public class TurnProcessor
     {
         var pc = ResolvePC(order, p, game);
         if (pc == null) return MakeResult(order, "No population centre", false);
+        if (pc.NationId != order.NationId)
+            return MakeResult(order, "Can only remove your own port", false);
+        if (!pc.HasPort) return MakeResult(order, $"{pc.Name} has no port", false);
         pc.HasPort = false;
         order.Status = "resolved"; order.Result = $"Port removed from {pc.Name}";
         return MakeResult(order, order.Result);
@@ -3499,10 +3904,34 @@ public class TurnProcessor
 
     private object ProcessTransferOwnership(Order order, Dictionary<string, JsonElement> p, Game game)
     {
+        if (order.Character == null) return MakeResult(order, "No character", false);
+        if (order.Character.EmissarySkill <= 0)
+            return MakeResult(order, "Needs emissary skill", false);
         var pc = ResolvePC(order, p, game);
         if (pc == null) return MakeResult(order, "No population centre", false);
-        pc.NationId = order.NationId;
-        order.Status = "resolved"; order.Result = $"Ownership of {pc.Name} transferred to {order.Nation.Name}";
+        if (pc.NationId != order.NationId)
+            return MakeResult(order, "Can only transfer your own population centres", false);
+        if (pc.IsHidden) return MakeResult(order, "Population centre is hidden", false);
+        if (pc.IsCapital) return MakeResult(order, "Cannot transfer the capital", false);
+        if (pc.LocationHex != order.Character.LocationHex)
+            return MakeResult(order, "Must be at the location of the centre", false);
+        if (!p.TryGetValue("targetId", out var tgtEl))
+            return MakeResult(order, "Missing targetId: emissary receiving the centre", false);
+        var target = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == tgtEl.GetString());
+        if (target == null || target.IsDead) return MakeResult(order, "Target not found", false);
+        if (target.IsKidnapped) return MakeResult(order, "Target is a hostage", false);
+        if (target.EmissarySkill <= 0) return MakeResult(order, "Target needs emissary skill", false);
+        if (target.LocationHex != order.Character.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
+        if (target.NationId == order.NationId)
+            return MakeResult(order, "Target must be of another nation", false);
+        var targetNation = game.Nations.FirstOrDefault(n => n.Id == target.NationId);
+        if (targetNation == null) return MakeResult(order, "Target nation not found", false);
+        var fwd = order.Nation.Relations.FirstOrDefault(r => r.TargetNationId == target.NationId);
+        if ((fwd?.Level ?? 0) <= -1) return MakeResult(order, "Nations are enemies", false);
+        pc.NationId = target.NationId;
+        order.Status = "resolved";
+        order.Result = $"Ownership of {pc.Name} transferred to {targetNation.Name} via {target.Name}";
         return MakeResult(order, order.Result);
     }
 
@@ -3510,6 +3939,16 @@ public class TurnProcessor
     {
         var pc = ResolvePC(order, p, game);
         if (pc == null) return MakeResult(order, "No population centre", false);
+        if (order.Character == null || order.Character.LocationHex != (CapitalHex(order.Nation) ?? ""))
+            return MakeResult(order, "Must be at your current capital", false);
+        if (pc.NationId != order.NationId)
+            return MakeResult(order, "New capital must be owned by your nation", false);
+        if (pc.IsSieged) return MakeResult(order, "Capital and new capital must not be under siege", false);
+        var curCap = order.Nation.PopulationCentres.FirstOrDefault(x => x.IsCapital);
+        if (curCap != null && curCap.IsSieged)
+            return MakeResult(order, "Capital and new capital must not be under siege", false);
+        if (pc.Size != "major town" && pc.Size != "city")
+            return MakeResult(order, "New capital must be a major town or city", false);
         // Reglamento: 25000 oro.
         const int cost = 25000;
         if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
@@ -3529,9 +3968,21 @@ public class TurnProcessor
         return hex != null ? GetPC(game, hex) : null;
     }
 
+    private static int RankParam(Dictionary<string, JsonElement> p, string key, int def)
+    {
+        if (p.TryGetValue(key, out var el) && el.ValueKind == System.Text.Json.JsonValueKind.Number)
+            return Math.Clamp(el.GetInt32(), 0, 30);
+        return def;
+    }
+
     private object ProcessNameCharacter(Order order, Dictionary<string, JsonElement> p, string type)
     {
         if (!p.TryGetValue("name", out var nEl)) return MakeResult(order, "Missing name", false);
+        var newName = (nEl.GetString() ?? "").Trim();
+        if (newName.Length < 5 || newName.Length > 17)
+            return MakeResult(order, "Name must be 5-17 letters", false);
+        if (!AtCapital(order))
+            return MakeResult(order, "Must be at your own capital", false);
         // Reglamento: multi (725) 10000 oro; resto 5000.
         int cost = order.Code == 725 ? 10000 : 5000;
         if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
@@ -3544,18 +3995,18 @@ public class TurnProcessor
         {
             Id = Guid.NewGuid().ToString(),
             NationId = order.NationId,
-            Name = nEl.GetString()!,
+            Name = newName,
             Type = type,
             LocationHex = capital?.LocationHex ?? "0,0",
             MaxHealth = 100,
             Health = 100,
             Stealth = NationAbilities.HasForNation(order.Nation?.Name, "NEWCHAR_STEALTH") ? _rng.Next(1, 7) : 0,
-            ChallengeRank = NationAbilities.HasForNation(order.Nation?.Name, "NEWCHAR_CHALLENGE") ? _rng.Next(1, 7) : 0
+            ChallengeRank = NationAbilities.HasForNation(order.Nation?.Name, "NEWCHAR_CHALLENGE") ? _rng.Next(1, 7) : 0,
+            CommandSkill = type == "commander" ? startSkill : RankParam(p, "command", 0),
+            AgentSkill = type == "agent" ? startSkill : RankParam(p, "agent", 0),
+            EmissarySkill = type == "emissary" ? startSkill : RankParam(p, "emissary", 0),
+            MageSkill = type == "mage" ? startSkill : RankParam(p, "mage", 0)
         };
-        if (type == "mage") ch.MageSkill = startSkill;
-        if (type == "agent") ch.AgentSkill = startSkill;
-        if (type == "emissary") ch.EmissarySkill = startSkill;
-        if (type == "commander") ch.CommandSkill = startSkill;
         _db.Characters.Add(ch);
         order.Nation.Gold -= cost;
         order.Status = "resolved"; order.Result = $"Named new {type}: {ch.Name} for {cost} gold";
@@ -3565,23 +4016,60 @@ public class TurnProcessor
     private object ProcessHireArmy(Order order, Dictionary<string, JsonElement> p)
     {
         if (!p.TryGetValue("name", out var nEl)) return MakeResult(order, "Missing name", false);
+        if (order.Character != null && (order.Character.ArmyId != null || order.Character.CompanyId != null
+            || _db.Navies.Any(v => v.CommanderId == order.Character!.Id)))
+            return MakeResult(order, "Character already commands a force", false);
+        var hex = order.Character?.LocationHex;
+        var pc = hex == null ? null : OwnedPCAt(hex, order.NationId);
+        if (pc == null || pc.IsSieged)
+            return MakeResult(order, "Must be at one of your non-sieged population centres", false);
+        var troopType = "MenAtArms";
+        if (p.TryGetValue("troopType", out var ttEl)) troopType = ttEl.GetString() ?? troopType;
+        if (TroopShortKeys.TryGetValue(troopType, out var fullType)) troopType = fullType;
+        if (!UpgradeableTroopTypes.Contains(troopType, StringComparer.OrdinalIgnoreCase))
+            return MakeResult(order, "Troop type must be hc, lc, hi, li, ar or ma", false);
+        troopType = UpgradeableTroopTypes.First(t => t.Equals(troopType, StringComparison.OrdinalIgnoreCase));
+        var troops = p.TryGetValue("troops", out var trEl) ? Math.Max(0, trEl.GetInt32()) : 100;
+        if (troops <= 0) return MakeResult(order, "Troop count must be positive", false);
+        var weapons = "bronze";
+        if (p.TryGetValue("weapons", out var wEl)) weapons = wEl.GetString() ?? weapons;
+        var armour = "leather";
+        if (p.TryGetValue("armour", out var aEl)) armour = aEl.GetString() ?? armour;
+        if (!MaterialRank.TryGetValue(weapons, out var wRank) || (weapons != "bronze" && weapons != "steel" && weapons != "mithril"))
+            return MakeResult(order, "Weapon material must be bronze, steel or mithril", false);
+        if (!MaterialRank.TryGetValue(armour, out var aRank))
+            return MakeResult(order, "Armour material must be leather, bronze, steel or mithril", false);
+        var food = p.TryGetValue("food", out var fEl) ? Math.Max(0, fEl.GetInt32()) : 0;
         // Reglamento: 5000 de oro fijos; gratis con HIRE_FREE.
         var cost = NationAbilities.HireArmyCost(order.Nation?.Name);
-        if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
-        var capital = order.Nation.PopulationCentres.FirstOrDefault(x => x.IsCapital)
-                      ?? order.Nation.PopulationCentres.FirstOrDefault();
+        var matUnits = Math.Max(1, (troops + 99) / 100);
+        var needsMount = troopType is "HeavyCavalry" or "LightCavalry";
+        if (order.Nation.Gold < cost || order.Nation.Food < food
+            || (needsMount && order.Nation.Mounts < troops)
+            || MaterialStock(order.Nation, weapons) < matUnits || MaterialStock(order.Nation, armour) < matUnits)
+            return MakeResult(order, $"Insufficient resources: need {cost} gold, {food} food"
+                + (needsMount ? $", {troops} mounts" : "")
+                + $", {matUnits} {weapons} and {matUnits} {armour}", false);
         order.Nation.Gold -= cost;
+        order.Nation.Food = Math.Max(0, order.Nation.Food - food);
+        if (needsMount) order.Nation.Mounts -= troops;
+        ConsumeMaterial(order.Nation, weapons, matUnits);
+        ConsumeMaterial(order.Nation, armour, matUnits);
         var army = new Army
         {
             Id = Guid.NewGuid().ToString(),
             NationId = order.NationId,
             Name = nEl.GetString()!,
-            LocationHex = capital?.LocationHex ?? "0,0",
+            LocationHex = pc.LocationHex,
             Morale = NationAbilities.HireMorale(order.Nation?.Name),
-            Training = 10
+            Training = 10,
+            Food = food
         };
+        SetTroopCount(army, troopType, troops);
+        SetTroopWeaponRank(army, troopType, wRank);
+        SetTroopArmourRank(army, troopType, aRank);
         _db.Armies.Add(army);
-        order.Status = "resolved"; order.Result = $"Hired army: {army.Name}";
+        order.Status = "resolved"; order.Result = $"Hired army: {army.Name} ({troops} {troopType}) for {cost} gold";
         return MakeResult(order, order.Result);
     }
 
@@ -3598,20 +4086,34 @@ public class TurnProcessor
 
     private object ProcessScoutArmy(Order order, Dictionary<string, JsonElement> p, Game game)
     {
-        var hex = p.TryGetValue("hex", out var h) ? h.GetString()! : (order.Character?.LocationHex ?? order.Army?.LocationHex ?? "");
+        if (!p.TryGetValue("commanderId", out var cmdEl))
+            return MakeResult(order, "Missing commanderId of the force to scout", false);
+        var boss = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == cmdEl.GetString());
+        if (boss == null || boss.IsDead) return MakeResult(order, "Commander not found", false);
+        var forceArmy = game.Nations.SelectMany(n => n.Armies).FirstOrDefault(a => a.CommanderId == boss.Id);
+        var forceNavy = forceArmy == null
+            ? game.Nations.SelectMany(n => n.Navies).FirstOrDefault(v => v.CommanderId == boss.Id)
+            : null;
+        var forceHex = forceArmy?.LocationHex ?? forceNavy?.LocationHex;
+        if (forceHex == null) return MakeResult(order, $"{boss.Name} commands no force", false);
+        var hex = p.TryGetValue("hex", out var h) ? h.GetString()! : forceHex;
+        var follow = p.TryGetValue("follow", out var fEl)
+            && (fEl.ValueKind == System.Text.Json.JsonValueKind.True
+                || (fEl.ValueKind == System.Text.Json.JsonValueKind.String && (fEl.GetString() ?? "").ToLower() is "y" or "yes" or "true"));
         var eff = NationAbilities.ScoutSkill(order.Nation?.Name, 905, order.Character?.AgentSkill ?? 0, order.Character?.CommandSkill ?? 0);
         var sroll = eff + _rng.Next(1, 7);
         if (sroll < 12)
         {
             order.Status = "resolved";
-            order.Result = $"Scout at {hex}: nothing found (roll {sroll})";
+            order.Result = $"Scout of {boss.Name} at {hex}: nothing found (roll {sroll})";
             return MakeResult(order, order.Result);
         }
         var seen = game.Nations.Where(n => n.Id != order.NationId)
             .SelectMany(n => n.Armies).Where(a => a.LocationHex == hex)
             .Select(a => $"{a.Name} ({a.Nation.Name}) HC:{a.HeavyCavalry} HI:{a.HeavyInfantry}").ToList();
         order.Status = "resolved";
-        order.Result = seen.Count > 0 ? $"Scout at {hex}: {string.Join(", ", seen)}" : $"Scout at {hex}: nothing";
+        order.Result = (seen.Count > 0 ? $"Scout of {boss.Name} at {hex}: {string.Join(", ", seen)}" : $"Scout of {boss.Name} at {hex}: nothing")
+            + (follow ? " (following)" : "");
         return MakeResult(order, order.Result);
     }
 
@@ -3636,6 +4138,8 @@ public class TurnProcessor
 
     private object ProcessScoutCharacters(Order order, Dictionary<string, JsonElement> p, Game game)
     {
+        if (!IsLandHex(order.GameId, order.Character?.LocationHex))
+            return MakeResult(order, "Must be on land", false);
         var hex = p.TryGetValue("hex", out var h) ? h.GetString()! : (order.Character?.LocationHex ?? "");
         var eff = NationAbilities.ScoutSkill(order.Nation?.Name, 930, order.Character?.AgentSkill ?? 0, order.Character?.CommandSkill ?? 0);
         var sroll = eff + _rng.Next(1, 7);
@@ -3653,21 +4157,32 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessGuardLocation(Order order, Dictionary<string, JsonElement> p)
+    private object ProcessGuardLocation(Order order, Dictionary<string, JsonElement> p, Game game)
     {
         if (order.Character == null) return MakeResult(order, "No character", false);
         var hex = p.TryGetValue("hex", out var h) ? h.GetString()! : (order.Character.LocationHex);
+        var gpc = game.Nations.SelectMany(n => n.PopulationCentres).FirstOrDefault(x => x.LocationHex == hex);
+        if (gpc != null && gpc.NationId != order.NationId && gpc.IsHidden)
+            return MakeResult(order, "No visible population centre here", false);
+        var pc = game.Nations.SelectMany(n => n.PopulationCentres).FirstOrDefault(x => x.LocationHex == hex);
+        if (pc != null && pc.NationId != order.NationId && pc.IsHidden)
+            return MakeResult(order, "No visible population centre here", false);
         _db.Guards.Add(new Guard { Id = Guid.NewGuid().ToString(), CharacterId = order.Character.Id, TargetId = hex });
         order.Status = "resolved"; order.Result = $"Guarding location {hex}";
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessGuardCharacter(Order order, Dictionary<string, JsonElement> p)
+    private object ProcessGuardCharacter(Order order, Dictionary<string, JsonElement> p, Game game)
     {
         if (order.Character == null) return MakeResult(order, "No character", false);
         if (!p.TryGetValue("targetId", out var t)) return MakeResult(order, "Missing targetId", false);
-        _db.Guards.Add(new Guard { Id = Guid.NewGuid().ToString(), CharacterId = order.Character.Id, TargetId = t.GetString()! });
-        order.Status = "resolved"; order.Result = "Guarding character";
+        var target = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == t.GetString());
+        if (target == null || target.IsDead) return MakeResult(order, "Target not found", false);
+        if (target.Id == order.Character.Id) return MakeResult(order, "Cannot guard yourself", false);
+        if (target.LocationHex != order.Character.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
+        _db.Guards.Add(new Guard { Id = Guid.NewGuid().ToString(), CharacterId = order.Character.Id, TargetId = target.Id });
+        order.Status = "resolved"; order.Result = $"Guarding {target.Name}";
         return MakeResult(order, order.Result);
     }
 
@@ -3677,6 +4192,10 @@ public class TurnProcessor
         if (!p.TryGetValue("targetId", out var t)) return MakeResult(order, "Missing targetId", false);
         var target = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == t.GetString());
         if (target == null) return MakeResult(order, "Target not found", false);
+        if (target.NationId == order.NationId) return MakeResult(order, "Target must be of a different nation", false);
+        if (target.IsKidnapped) return MakeResult(order, "Target is a hostage", false);
+        if (target.LocationHex != order.Character.LocationHex)
+            return MakeResult(order, "Target must be at the same location", false);
         var effA = NationAbilities.AssassinSkill(order.Nation?.Name, order.Character.AgentSkill);
         var roll = effA + _rng.Next(1, 7);
         if (roll >= 12)
@@ -3697,6 +4216,9 @@ public class TurnProcessor
     {
         var pc = ResolvePC(order, p, game);
         if (pc == null) return MakeResult(order, "No population centre", false);
+        if (pc.NationId == order.NationId) return MakeResult(order, "Target must be of a different nation", false);
+        if (pc.IsHidden) return MakeResult(order, "No visible population centre here", false);
+        if (string.IsNullOrEmpty(pc.Fortification)) return MakeResult(order, $"{pc.Name} has no fortifications", false);
         pc.Fortification = pc.Fortification switch { "fortress" => "castle", "castle" => "walls", "walls" => "palisade", "palisade" => null, _ => null };
         order.Status = "resolved"; order.Result = $"Sabotaged fortifications at {pc.Name} (now {pc.Fortification})";
         return MakeResult(order, order.Result);
@@ -3706,6 +4228,9 @@ public class TurnProcessor
     {
         var pc = ResolvePC(order, p, game);
         if (pc == null) return MakeResult(order, "No population centre", false);
+        if (pc.NationId == order.NationId) return MakeResult(order, "Target must be of a different nation", false);
+        if (pc.IsHidden) return MakeResult(order, "No visible population centre here", false);
+        if (!pc.HasHarbour && !pc.HasPort) return MakeResult(order, $"{pc.Name} has no harbour or port", false);
         pc.HasPort = false; pc.HasHarbour = false;
         order.Status = "resolved"; order.Result = $"Sabotaged harbour/port at {pc.Name}";
         return MakeResult(order, order.Result);
@@ -3715,6 +4240,12 @@ public class TurnProcessor
     {
         var pc = ResolvePC(order, p, game);
         if (pc == null) return MakeResult(order, "No population centre", false);
+        if (pc.NationId == order.NationId) return MakeResult(order, "Target must be of a different nation", false);
+        if (pc.IsHidden) return MakeResult(order, "No visible population centre here", false);
+        var store = "timber";
+        if (p.TryGetValue("store", out var sEl)) store = sEl.GetString() ?? store;
+        if (store != "timber" && store != "food" && store != "mounts" && store != "leather" && store != "bronze" && store != "steel" && store != "mithril")
+            return MakeResult(order, "Store must be timber, food, mounts, leather, bronze, steel or mithril (not gold)", false);
         var amt = p.TryGetValue("amount", out var a) ? Math.Max(0, a.GetInt32()) : pc.Stores;
         pc.Stores = Math.Max(0, pc.Stores - amt);
         pc.Production = Math.Max(0, pc.Production - 50);
@@ -3722,11 +4253,31 @@ public class TurnProcessor
         return MakeResult(order, order.Result);
     }
 
-    private object ProcessStealArtifact(Order order, Dictionary<string, JsonElement> p)
+    private object ProcessStealArtifact(Order order, Dictionary<string, JsonElement> p, Game game)
     {
         if (!p.TryGetValue("artifactId", out var aId)) return MakeResult(order, "Missing artifactId", false);
         var art = _db.Artifacts.Find(aId.GetString());
         if (art == null) return MakeResult(order, "Artifact not found", false);
+        if (art.HeldByCharacterId == order.Character?.Id)
+            return MakeResult(order, "You already hold it", false);
+        if (art.HeldByCharacterId != null)
+        {
+            var holder = game.Nations.SelectMany(n => n.Characters).FirstOrDefault(c => c.Id == art.HeldByCharacterId);
+            if (holder == null) return MakeResult(order, "Holder not found", false);
+            if (holder.NationId == order.NationId)
+                return MakeResult(order, "Target must belong to another nation", false);
+            if (holder.LocationHex != order.Character?.LocationHex)
+                return MakeResult(order, "Artifact must be at the same hex", false);
+        }
+        else
+        {
+            if (art.LocationHex != order.Character?.LocationHex)
+                return MakeResult(order, "Artifact must be at the same hex", false);
+            var pc = game.Nations.SelectMany(n => n.PopulationCentres)
+                .FirstOrDefault(x => x.LocationHex == art.LocationHex);
+            if (pc != null && (pc.IsHidden || pc.NationId == order.NationId))
+                return MakeResult(order, "Artifact must lie in a visible foreign population centre", false);
+        }
         art.NationId = order.NationId;
         art.HeldByCharacterId = order.Character?.Id;
         art.IsAtCapital = order.Character == null;
@@ -3740,6 +4291,10 @@ public class TurnProcessor
             return MakeResult(order, "Missing nationId/amount", false);
         var victim = game.Nations.FirstOrDefault(n => n.Id == nid.GetString());
         if (victim == null) return MakeResult(order, "Victim nation not found", false);
+        if (victim.Id == order.NationId) return MakeResult(order, "Target must be of a different nation", false);
+        var pc = game.Nations.SelectMany(n => n.PopulationCentres)
+            .FirstOrDefault(x => x.LocationHex == order.Character?.LocationHex && x.NationId == victim.Id);
+        if (pc == null || pc.IsHidden) return MakeResult(order, "Need a visible foreign population centre at your hex", false);
         var amt = Math.Min(victim.Gold, Math.Max(0, aEl.GetInt32()));
         victim.Gold -= amt; order.Nation.Gold += amt;
         order.Status = "resolved"; order.Result = $"Stole {amt} gold from {victim.Name}";
@@ -3824,10 +4379,14 @@ public class TurnProcessor
         order.Status = "resolved"; order.Result = $"Bridge at {hex} sabotaged (roll {roll} vs {defense})";
         return MakeResult(order, order.Result);
     }
-    private object ProcessPostCamp(Order order, Dictionary<string, JsonElement> p)
+    private object ProcessPostCamp(Order order, Dictionary<string, JsonElement> p, Game game)
     {
         var hex = order.Character?.LocationHex ?? order.Army?.LocationHex;
         if (hex == null) return MakeResult(order, "No location for camp", false);
+        if (!IsLandHex(order.GameId, hex))
+            return MakeResult(order, "Camps need a land hex", false);
+        if (EnemyAtHex(game, hex, order.NationId))
+            return MakeResult(order, "Enemy forces present", false);
         // Reglamento: asentar campamento 4000 oro.
         const int cost = 4000;
         if (order.Nation.Gold < cost) return MakeResult(order, $"Insufficient gold: need {cost}", false);
