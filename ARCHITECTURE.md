@@ -35,6 +35,10 @@
   sale de aquí; si al ES le falta una clave **no compila**), `dict-es.ts`,
   `helpers.ts` (etiquetas de códigos de datos), `LangContext.tsx`
   (provider/hook/selector), `lang.tsx` (compat).
+- `frontend/.../GameView/` — `GameView.tsx` (datos y estado) +
+  `SetupView.tsx` + `ActiveGameView.tsx` (caparazón) + `tabs/` (una
+  pestaña por fichero) + `tabs/shared.tsx` (ayudas comunes) + `types.ts`.
+  Nada por encima de ~330 líneas.
 - `frontend/.../GameView.tsx` (~1600 líneas, pestañas inline) y
   `TurnProcessor.cs` son los dos próximos a trocear; mientras tanto,
   no añadas más casos ahí sin mirar esta nota.
