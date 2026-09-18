@@ -269,6 +269,8 @@ public sealed partial class TurnProcessor
             315 => ProcessPurchaseCaravans(order, parameters),
             320 => ProcessSellCaravans(order, parameters),
             325 => ProcessNationSell(order, parameters),
+            960 => ProcessIncreaseCaravanPrices(order, parameters),
+            965 => ProcessReduceCaravanPrices(order, parameters),
 
             // â”€â”€ COMBATE â”€â”€
             230 => ProcessAttack(order, parameters, game),

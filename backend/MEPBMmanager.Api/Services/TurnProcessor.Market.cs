@@ -66,6 +66,8 @@ public sealed partial class TurnProcessor
 
     private Dictionary<string, int> _marketBuyLeft = new();
 
+    private int _caravanPriceModPct; // 960/965: caravan price adjustment in percent
+
 
     private static bool IsMarketProduct(string? p, out string canon)
     {
@@ -102,7 +104,7 @@ public sealed partial class TurnProcessor
         if (!parameters.TryGetValue("amount", out var amtEl))
             return MakeResult(order, "No amount specified", false);
         var requested = amtEl.GetInt32();
-        var (buyPrice, _) = MarketPrice[product];
+        var (buyPrice, _) = AdjustedMarketRate(product);
         var bid = parameters.TryGetValue("price", out var prEl) ? prEl.GetInt32() : buyPrice;
         if (bid < buyPrice) return MakeResult(order, $"Bid {bid} below market buy price {buyPrice}", false);
 
@@ -131,7 +133,7 @@ public sealed partial class TurnProcessor
         var requested = amtEl.GetInt32();
         if (requested <= 0) return MakeResult(order, "Amount must be positive", false);
 
-        var (baseBuy, _) = MarketPrice[product];
+        var (baseBuy, _) = AdjustedMarketRate(product);
         var buyPrice = NationAbilities.MarketBuyPrice(order.Nation?.Name, baseBuy);
         var available = _marketBuyLeft.GetValueOrDefault(product);
         var amount = Math.Min(requested, available);
@@ -166,7 +168,7 @@ public sealed partial class TurnProcessor
                 return MakeResult(order, "Must be at your own non-sieged population centre to sell", false);
         }
 
-        var (_, baseSell) = MarketPrice[product];
+        var (_, baseSell) = AdjustedMarketRate(product);
         var sellPrice = NationAbilities.MarketSellPrice(order.Nation?.Name, baseSell);
         var stock = GetStock(order.Nation, product);
         var amount = Math.Min(requested, stock);
@@ -196,7 +198,7 @@ public sealed partial class TurnProcessor
             return MakeResult(order, "No valid product specified", false);
         var pct = parameters.TryGetValue("percentage", out var pe) ? Math.Clamp(pe.GetInt32(), 0, 100) : 100;
 
-        var (_, baseSellAll) = MarketPrice[product];
+        var (_, baseSellAll) = AdjustedMarketRate(product);
         var sellPrice = NationAbilities.MarketSellPrice(order.Nation?.Name, baseSellAll);
         var stock = GetStock(order.Nation, product);
         var amount = stock * pct / 100;
@@ -270,5 +272,39 @@ public sealed partial class TurnProcessor
         order.Status = "resolved";
         order.Result = $"Caravan transported {amount} {resource} for {cost} gold";
         return MakeResult(order, order.Result);
+    }
+
+
+    private object ProcessIncreaseCaravanPrices(Order order, Dictionary<string, JsonElement> parameters)
+    {
+        // Increase caravan buy prices by 10%, decrease sell prices by 10%
+        // Makes buying more expensive and selling less profitable for this turn
+        _caravanPriceModPct = 10;
+        order.Status = "resolved";
+        order.Result = "Caravan prices increased: buy +10%, sell -10%";
+        return MakeResult(order, order.Result);
+    }
+
+
+    private object ProcessReduceCaravanPrices(Order order, Dictionary<string, JsonElement> parameters)
+    {
+        // Decrease caravan buy prices by 10%, increase sell prices by 10%
+        // Makes buying cheaper and selling more profitable for this turn
+        _caravanPriceModPct = -10;
+        order.Status = "resolved";
+        order.Result = "Caravan prices reduced: buy -10%, sell +10%";
+        return MakeResult(order, order.Result);
+    }
+
+
+    private (int Buy, int Sell) AdjustedMarketRate(string product)
+    {
+        var (buy, sell) = MarketPrice.TryGetValue((product ?? "").ToLower(), out var p) ? p : (0, 0);
+        if (_caravanPriceModPct != 0)
+        {
+            buy = buy * (100 + _caravanPriceModPct) / 100;
+            sell = sell * (100 - _caravanPriceModPct) / 100;
+        }
+        return (buy, sell);
     }
 }
