@@ -734,7 +734,7 @@ public sealed partial class OrderEstimateService
                 : code == 940 ? SpellType.Lore : code == 825 ? SpellType.Movement : SpellType.Combat;
             var spellId = scope.Number("spellId", -1);
             var spell = SpellCatalog.Get(spellId);
-            if (spell == null || spell.Type != wanted || spell.IsLost
+            if (spell == null || spell.Type != wanted
                 || !scope.Character.Spells.Any(s => s.SpellId == spellId && s.IsKnown && !s.IsLost))
                 scope.Errors.Add(OrderTexts.Format(scope.Lang, "err.valid-spell", OrderTexts.SpellTypeName(scope.Lang, wanted)));
         }
@@ -746,6 +746,53 @@ public sealed partial class OrderEstimateService
                 scope.Errors.Add(OrderTexts.Get(scope.Lang, "err.unknown-spell"));
             else if (code == 705 && spell.IsLost && !NationAbilities.CanLearnLostSpell(scope.Nation.Name, spell.Id))
                 scope.Errors.Add(OrderTexts.Format(scope.Lang, "err.lost-spell-sd-name-is-not-available-to-your-nati", spell.Name));
+        }
+        if (code == 330)
+        {
+            var spellId = scope.Number("spellId", -1);
+            var ch = scope.Character;
+            if (spellId is 502 or 504)
+            {
+                var target = scope.FindCharacter(scope.Text("targetId"));
+                if (target == null || target.IsDead)
+                    scope.Errors.Add(OrderTexts.Get(scope.Lang, "err.target-character-not-found"));
+                else if (target.NationId == scope.Nation.Id)
+                    scope.Errors.Add(OrderTexts.Get(scope.Lang, "err.conjuring-target-must-be-of-a-different-nation"));
+                else if (target.LocationHex != ch.LocationHex)
+                    scope.Errors.Add(OrderTexts.Format(scope.Lang, "err.conjuring-target-must-be-in-the-same-hex-t", ch.LocationHex));
+            }
+            else if (spellId == 506)
+            {
+                var target = scope.FindCharacter(scope.Text("targetId"));
+                if (target == null || target.IsDead)
+                    scope.Errors.Add(OrderTexts.Get(scope.Lang, "err.target-character-not-found"));
+                else if (target.NationId == scope.Nation.Id)
+                    scope.Errors.Add(OrderTexts.Get(scope.Lang, "err.conjuring-target-must-be-of-a-different-nation"));
+                else if (!IsSameOrAdjacentHex(ch.LocationHex, target.LocationHex))
+                    scope.Errors.Add(OrderTexts.Format(scope.Lang, "err.conjuring-target-must-be-in-same-or-adjacent-hex-t", ch.LocationHex));
+            }
+            else if (spellId == 508)
+            {
+                var pc = scope.Game.Nations.First(n => n.Id == scope.Nation.Id).PopulationCentres
+                    .FirstOrDefault(p => p.LocationHex == ch.LocationHex);
+                if (pc == null)
+                    scope.Errors.Add(OrderTexts.Get(scope.Lang, "err.conjuring-mounts-must-be-at-own-population-centre"));
+            }
+            else if (spellId == 510)
+            {
+                var atOwnPC = scope.Nation.PopulationCentres.Any(p => p.LocationHex == ch.LocationHex);
+                var withArmy = scope.Game.Nations.SelectMany(x => x.Armies).Any(a => a.NationId == scope.Nation.Id && a.LocationHex == ch.LocationHex);
+                if (!atOwnPC && !withArmy)
+                    scope.Errors.Add(OrderTexts.Get(scope.Lang, "err.conjuring-food-must-be-at-own-pc-or-with-army-navy"));
+            }
+            else if (spellId == 512)
+            {
+                var withArmy = scope.Game.Nations.SelectMany(x => x.Armies).Any(a => a.NationId == scope.Nation.Id && a.LocationHex == ch.LocationHex);
+                if (!withArmy)
+                    scope.Errors.Add(OrderTexts.Get(scope.Lang, "err.conjuring-hordes-must-be-with-army-or-navy"));
+                if (!NationAbilities.CanLearnLostSpell(scope.Nation.Name, 512))
+                    scope.Errors.Add(OrderTexts.Get(scope.Lang, "err.conjuring-hordes-dark-servants-only"));
+            }
         }
     }
 
@@ -967,5 +1014,19 @@ public sealed partial class OrderEstimateService
                     scope.Errors.Add(OrderTexts.Format(scope.Lang, "err.only-math-max-0-left-recruits-left-at-pc-name-ot", Math.Max(0, left), pc.Name, taken));
             }
         }
+    }
+
+    private static bool IsSameOrAdjacentHex(string hexA, string hexB)
+    {
+        if (hexA == hexB) return true;
+        var a = hexA.Split(',');
+        var b = hexB.Split(',');
+        if (a.Length != 2 || b.Length != 2) return false;
+        if (!int.TryParse(a[0], out var aq) || !int.TryParse(a[1], out var ar)) return false;
+        if (!int.TryParse(b[0], out var bq) || !int.TryParse(b[1], out var br)) return false;
+        var dq = Math.Abs(aq - bq);
+        var dr = Math.Abs(ar - br);
+        var ds = Math.Abs((-aq - ar) - (-bq - br));
+        return Math.Max(dq, Math.Max(dr, ds)) == 1;
     }
 }

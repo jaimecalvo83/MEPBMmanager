@@ -172,8 +172,8 @@ public sealed partial class OrderEstimateService
             180 or 185 => new() { Sel("nationId", L("label.nation"), scope.AllNations()) },
             690 => new() { Sel("nationId", L("label.victim-nation"), scope.AllNations()), Num("amount", L("label.gold-amount"), min: 1) },
             210 or 615 or 620 => new() { Sel("targetId", L("label.target-character"), scope.CharacterOptions(foesAtLocation)) },
-            225 or 330 => new() { Sel("spellId", L("label.spell"),
-                code == 225 ? scope.KnownSpellOptions(SpellType.Combat) : scope.KnownSpellOptions(SpellType.Conjuring)) },
+            225 => new() { Sel("spellId", L("label.spell"), scope.KnownSpellOptions(SpellType.Combat)) },
+            330 => ConjuringFields(scope, lang),
             120 => new() { Sel("spellId", L("label.spell"), scope.KnownSpellOptions(SpellType.Heal)),
                 Sel("targetId", L("label.target-character-same-hex-empty-self"), scope.CharacterOptions(scope.Game.Nations
                     .SelectMany(n => n.Characters).Where(c => !c.IsDead && c.LocationHex == scope.EffectiveLocation)), req: false) },
@@ -234,5 +234,25 @@ public sealed partial class OrderEstimateService
             947 or 948 => new() { Sel("resource", L("label.resource"), ProductOptions(lang)), Num("amount", L("label.amount"), min: 1) },
             _ => new List<OrderFieldSpecDto>()
         };
+    }
+
+    private static readonly HashSet<int> ConjuringDamageSpells = new() { 502, 504, 506 };
+    private static readonly HashSet<int> ConjuringSummonSpells = new() { 508, 510, 512 };
+
+    private static List<OrderFieldSpecDto> ConjuringFields(EstimateScope scope, string lang)
+    {
+        string L(string key) => OrderTexts.Get(lang, key);
+        var fields = new List<OrderFieldSpecDto>
+        {
+            Sel("spellId", L("label.spell"), scope.KnownSpellOptions(SpellType.Conjuring))
+        };
+        var spellId = scope.Number("spellId", -1);
+        var foesAtLocation = scope.Game.Nations.SelectMany(n => n.Characters)
+            .Where(c => c.NationId != scope.Nation.Id && !c.IsDead && c.LocationHex == scope.EffectiveLocation).ToList();
+        if (ConjuringDamageSpells.Contains(spellId))
+            fields.Add(Sel("targetId", L("label.target-character-other-nation-same-hex"), scope.CharacterOptions(foesAtLocation)));
+        else if (ConjuringSummonSpells.Contains(spellId))
+            fields.Add(Num("amount", L("label.amount-empty-0-max"), req: false, min: 0));
+        return fields;
     }
 }

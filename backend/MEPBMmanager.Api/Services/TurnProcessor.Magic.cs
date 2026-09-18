@@ -69,19 +69,85 @@ public sealed partial class TurnProcessor
 
         var roll = order.Character!.MageSkill + _rng.Next(1, 7);
         var success = roll >= 10;
+        var ch = order.Character;
+        var mageRank = ch.MageSkill;
 
-        if (success)
+        if (!success)
         {
-            var amount = _rng.Next(100, 500);
-            order.Nation.Gold += amount;
-            order.Character.MageSkill = Math.Min(100, order.Character.MageSkill + 1);
             order.Status = "resolved";
-            order.Result = $"Conjuring successful (roll {roll}): created {amount} gold (+1 mage skill)";
+            order.Result = $"{def.Name} failed (roll {roll})";
+            return MakeResult(order, order.Result);
+        }
+
+        ch.MageSkill = Math.Min(100, ch.MageSkill + 1);
+        var spell = ch.Spells.FirstOrDefault(s => s.SpellId == def.Id && s.IsKnown && !s.IsLost);
+        if (spell != null) spell.Rank = Math.Min(100, spell.Rank + _rng.Next(1, 6));
+
+        if (def.Id == 502 || def.Id == 504 || def.Id == 506)
+        {
+            var divisor = def.Id == 502 ? 3 : 2;
+            if (!parameters.TryGetValue("targetId", out var tgtEl)
+                || _db.Characters.Find(tgtEl.GetString()) is not { } target
+                || target.IsDead)
+                return MakeResult(order, $"{def.Name} failed: no valid target", false);
+
+            var damage = Math.Max(1, mageRank / divisor);
+            target.Health = Math.Max(0, target.Health - damage);
+            order.Status = "resolved";
+            order.Result = $"{def.Name} successful (roll {roll}): {target.Name} loses {damage} HP (+1 mage skill)";
+        }
+        else if (def.Id == 508)
+        {
+            var amount = parameters.TryGetValue("amount", out var amtEl) ? amtEl.GetInt32() : 0;
+            var maxMounts = 5 * mageRank;
+            var conjured = amount > 0 ? Math.Min(amount, maxMounts) : maxMounts;
+            var pc = order.Nation.PopulationCentres.FirstOrDefault(p => p.LocationHex == ch.LocationHex);
+            if (pc == null)
+                return MakeResult(order, $"{def.Name} failed: not at own population centre", false);
+
+            order.Nation.Mounts += conjured;
+            order.Status = "resolved";
+            order.Result = $"{def.Name} successful (roll {roll}): created {conjured} mounts (+1 mage skill)";
+        }
+        else if (def.Id == 510)
+        {
+            var amount = parameters.TryGetValue("amount", out var amtEl) ? amtEl.GetInt32() : 0;
+            var maxFood = 25 * mageRank;
+            var conjured = amount > 0 ? Math.Min(amount, maxFood) : maxFood;
+            var army = order.Game.Nations.SelectMany(n => n.Armies).FirstOrDefault(a => a.NationId == order.Nation.Id && a.LocationHex == ch.LocationHex);
+            if (army != null)
+            {
+                army.Food += conjured;
+                order.Status = "resolved";
+                order.Result = $"{def.Name} successful (roll {roll}): created {conjured} food in {army.Name} (+1 mage skill)";
+            }
+            else
+            {
+                order.Nation.Food += conjured;
+                order.Status = "resolved";
+                order.Result = $"{def.Name} successful (roll {roll}): created {conjured} food (+1 mage skill)";
+            }
+        }
+        else if (def.Id == 512)
+        {
+            var amount = parameters.TryGetValue("amount", out var amtEl) ? amtEl.GetInt32() : 0;
+            var maxTroops = 5 * mageRank;
+            var conjured = amount > 0 ? Math.Min(amount, maxTroops) : maxTroops;
+            var army = order.Game.Nations.SelectMany(n => n.Armies).FirstOrDefault(a => a.NationId == order.Nation.Id && a.LocationHex == ch.LocationHex);
+            if (army == null)
+                return MakeResult(order, $"{def.Name} failed: not with an army or navy", false);
+
+            army.MenAtArms += conjured;
+            army.MAAWeaponRank = Math.Min(army.MAAWeaponRank, 10);
+            army.MAAArmourRank = 0;
+            army.MAATraining = Math.Min(army.MAATraining, 10);
+            order.Status = "resolved";
+            order.Result = $"{def.Name} successful (roll {roll}): created {conjured} men-at-arms in {army.Name} (wooden weapons, no armour, poor training) (+1 mage skill)";
         }
         else
         {
             order.Status = "resolved";
-            order.Result = $"Conjuring failed (roll {roll})";
+            order.Result = $"{def.Name}: unimplemented (roll {roll})";
         }
 
         return MakeResult(order, order.Result);

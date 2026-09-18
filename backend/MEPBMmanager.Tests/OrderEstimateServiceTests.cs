@@ -284,4 +284,249 @@ public class OrderEstimateServiceTests
         Assert.Equal(0, scope.Number("missing"));
         Assert.Equal(new[] { "1", "2" }, scope.IdList("ids"));
     }
+
+    private static Character MageCharacter(string id, string nationId, string hex, int mageSkill, string type = "mage")
+    {
+        return new Character
+        {
+            Id = id, NationId = nationId, Name = $"Mage{id}", Type = type,
+            LocationHex = hex, MageSkill = mageSkill,
+            Spells = new List<Spell>(), Artifacts = new List<Artifact>()
+        };
+    }
+
+    private static Nation EnemyNation(string gameId, string id, string name)
+    {
+        return new Nation
+        {
+            Id = id, GameId = gameId, Name = name, Allegiance = "dark",
+            Gold = 1000, Food = 500, Timber = 200, Leather = 100, Bronze = 100,
+            Steel = 100, Mounts = 100, TaxRate = 30,
+            Characters = new List<Character>(), Armies = new List<Army>(),
+            PopulationCentres = new List<PopulationCentre>(), Navies = new List<Navy>(),
+            Relations = new List<NationRelation>()
+        };
+    }
+
+    [Fact]
+    public void ConjuringForms_506_RequiresTargetId()
+    {
+        using var db = NewDb();
+        var svc = new OrderEstimateService(db);
+        var (game, nation, ch) = NewWorld();
+        ch.Type = "mage";
+        ch.MageSkill = 30;
+        ch.Spells.Add(new Spell { SpellId = 506, IsKnown = true, IsLost = false, Rank = 40 });
+
+        var fields = svc.RequiresFor(330, new EstimateCtx(game, nation, ch, ch.LocationHex,
+            new Dictionary<string, System.Text.Json.JsonElement> { ["spellId"] = System.Text.Json.JsonSerializer.SerializeToElement(506) }, "en"));
+
+        Assert.Contains(fields, f => f.Key == "targetId");
+    }
+
+    [Fact]
+    public void ConjuringForms_508_RequiresAmount()
+    {
+        using var db = NewDb();
+        var svc = new OrderEstimateService(db);
+        var (game, nation, ch) = NewWorld();
+        nation.Name = "Riders of Rohan";
+        ch.Type = "mage";
+        ch.MageSkill = 30;
+        ch.Spells.Add(new Spell { SpellId = 508, IsKnown = true, IsLost = false, Rank = 40 });
+
+        var fields = svc.RequiresFor(330, new EstimateCtx(game, nation, ch, ch.LocationHex,
+            new Dictionary<string, System.Text.Json.JsonElement> { ["spellId"] = System.Text.Json.JsonSerializer.SerializeToElement(508) }, "en"));
+
+        Assert.Contains(fields, f => f.Key == "amount");
+    }
+
+    [Fact]
+    public void Conjuring_506_TargetDifferentNation()
+    {
+        using var db = NewDb();
+        var svc = new OrderEstimateService(db);
+        var (game, nation, ch) = NewWorld();
+        ch.Type = "mage";
+        ch.MageSkill = 30;
+        ch.LocationHex = "10,10";
+        ch.Spells.Add(new Spell { SpellId = 506, IsKnown = true, IsLost = false, Rank = 40 });
+
+        var foe = new Character
+        {
+            Id = "foe1", NationId = "n2", Name = "Enemy Mage", Type = "mage",
+            LocationHex = "11,10", MageSkill = 20,
+            Spells = new List<Spell>(), Artifacts = new List<Artifact>()
+        };
+        var enemy = EnemyNation("g1", "n2", "Enemy");
+        enemy.Characters.Add(foe);
+        game.Nations.Add(enemy);
+        db.Games.Add(game);
+        db.SaveChanges();
+
+        var errors = Validate(svc, 330, ValidateScope(db, game, nation, ch, """{"spellId":506,"targetId":"foe1"}"""));
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void Conjuring_506_TargetSameNation_Rejected()
+    {
+        using var db = NewDb();
+        var svc = new OrderEstimateService(db);
+        var (game, nation, ch) = NewWorld();
+        ch.Type = "mage";
+        ch.MageSkill = 30;
+        ch.Spells.Add(new Spell { SpellId = 506, IsKnown = true, IsLost = false, Rank = 40 });
+
+        var ally = new Character
+        {
+            Id = "ally1", NationId = "n1", Name = "Ally", Type = "commander",
+            LocationHex = "10,10", CommandSkill = 10,
+            Spells = new List<Spell>(), Artifacts = new List<Artifact>()
+        };
+        nation.Characters.Add(ally);
+        db.Games.Add(game);
+        db.SaveChanges();
+
+        var errors = Validate(svc, 330, ValidateScope(db, game, nation, ch, """{"spellId":506,"targetId":"ally1"}"""));
+
+        Assert.Contains(errors, e => e.Contains("different nation"));
+    }
+
+    [Fact]
+    public void Conjuring_506_TargetAdjacentHex()
+    {
+        using var db = NewDb();
+        var svc = new OrderEstimateService(db);
+        var (game, nation, ch) = NewWorld();
+        ch.Type = "mage";
+        ch.MageSkill = 30;
+        ch.LocationHex = "10,10";
+        ch.Spells.Add(new Spell { SpellId = 506, IsKnown = true, IsLost = false, Rank = 40 });
+
+        var foe = new Character
+        {
+            Id = "foe1", NationId = "n2", Name = "Enemy Mage", Type = "mage",
+            LocationHex = "11,10", MageSkill = 20,
+            Spells = new List<Spell>(), Artifacts = new List<Artifact>()
+        };
+        var enemy = EnemyNation("g1", "n2", "Enemy");
+        enemy.Characters.Add(foe);
+        game.Nations.Add(enemy);
+        db.Games.Add(game);
+        db.SaveChanges();
+
+        var errors = Validate(svc, 330, ValidateScope(db, game, nation, ch, """{"spellId":506,"targetId":"foe1"}"""));
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void Conjuring_508_AtOwnPC()
+    {
+        using var db = NewDb();
+        var svc = new OrderEstimateService(db);
+        var (game, nation, ch) = NewWorld();
+        nation.Name = "Riders of Rohan";
+        ch.Type = "mage";
+        ch.MageSkill = 30;
+        ch.LocationHex = "10,10";
+        ch.Spells.Add(new Spell { SpellId = 508, IsKnown = true, IsLost = false, Rank = 40 });
+        db.Games.Add(game);
+        db.SaveChanges();
+
+        var errors = Validate(svc, 330, ValidateScope(db, game, nation, ch, """{"spellId":508,"amount":0}"""));
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void Conjuring_508_NotAtOwnPC_Rejected()
+    {
+        using var db = NewDb();
+        var svc = new OrderEstimateService(db);
+        var (game, nation, ch) = NewWorld();
+        nation.Name = "Riders of Rohan";
+        ch.Type = "mage";
+        ch.MageSkill = 30;
+        ch.LocationHex = "99,99";
+        ch.Spells.Add(new Spell { SpellId = 508, IsKnown = true, IsLost = false, Rank = 40 });
+        db.Games.Add(game);
+        db.SaveChanges();
+
+        var errors = Validate(svc, 330, ValidateScope(db, game, nation, ch, """{"spellId":508,"amount":0}"""));
+
+        Assert.Contains(errors, e => e.Contains("population centre"));
+    }
+
+    [Fact]
+    public void Conjuring_510_WithArmy()
+    {
+        using var db = NewDb();
+        var svc = new OrderEstimateService(db);
+        var (game, nation, ch) = NewWorld();
+        ch.Type = "mage";
+        ch.MageSkill = 30;
+        ch.LocationHex = "10,10";
+        ch.Spells.Add(new Spell { SpellId = 510, IsKnown = true, IsLost = false, Rank = 40 });
+        nation.Armies.Add(new Army
+        {
+            Id = "a1", NationId = "n1", Name = "Test Army", LocationHex = "10,10",
+            Characters = new List<Character>()
+        });
+        db.Games.Add(game);
+        db.SaveChanges();
+
+        var errors = Validate(svc, 330, ValidateScope(db, game, nation, ch, """{"spellId":510,"amount":0}"""));
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void Conjuring_512_WithArmy_DarkServantsOnly()
+    {
+        using var db = NewDb();
+        var svc = new OrderEstimateService(db);
+        var (game, nation, ch) = NewWorld();
+        nation.Name = "Witch-king";
+        ch.Type = "mage";
+        ch.MageSkill = 30;
+        ch.LocationHex = "10,10";
+        ch.Spells.Add(new Spell { SpellId = 512, IsKnown = true, IsLost = false, Rank = 40 });
+        nation.Armies.Add(new Army
+        {
+            Id = "a1", NationId = "n1", Name = "Test Army", LocationHex = "10,10",
+            Characters = new List<Character>()
+        });
+        db.Games.Add(game);
+        db.SaveChanges();
+
+        var errors = Validate(svc, 330, ValidateScope(db, game, nation, ch, """{"spellId":512,"amount":0}"""));
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void Conjuring_512_NotDarkServants_Rejected()
+    {
+        using var db = NewDb();
+        var svc = new OrderEstimateService(db);
+        var (game, nation, ch) = NewWorld();
+        ch.Type = "mage";
+        ch.MageSkill = 30;
+        ch.LocationHex = "10,10";
+        ch.Spells.Add(new Spell { SpellId = 512, IsKnown = true, IsLost = false, Rank = 40 });
+        nation.Armies.Add(new Army
+        {
+            Id = "a1", NationId = "n1", Name = "Test Army", LocationHex = "10,10",
+            Characters = new List<Character>()
+        });
+        db.Games.Add(game);
+        db.SaveChanges();
+
+        var errors = Validate(svc, 330, ValidateScope(db, game, nation, ch, """{"spellId":512,"amount":0}"""));
+
+        Assert.Contains(errors, e => e.Contains("Dark Servants"));
+    }
 }
