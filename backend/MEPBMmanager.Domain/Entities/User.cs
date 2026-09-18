@@ -7,6 +7,7 @@ public class User
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string RoleId { get; set; } = "game_user";
+    public string PreferredLanguage { get; set; } = "en";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public Role Role { get; set; } = null!;

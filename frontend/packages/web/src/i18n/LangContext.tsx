@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { en, type DictKey } from './dict-en';
 import { es } from './dict-es';
+import { useAuthStore } from '../stores/authStore';
+import { authApi } from '../api/client';
 
 export type Lang = 'en' | 'es';
 
@@ -15,6 +17,7 @@ const LangCtx = createContext<{ lang: Lang; setLang: (l: Lang) => void; t: TFunc
 });
 
 export function LangProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuthStore();
   const [lang, setLangState] = useState<Lang>(() => {
     try {
       return (localStorage.getItem('mepbm-lang') as Lang) || 'en';
@@ -22,12 +25,28 @@ export function LangProvider({ children }: { children: ReactNode }) {
       return 'en';
     }
   });
+
+  // Sync with auth store preferredLanguage on mount/login
+  useEffect(() => {
+    if (user?.preferredLanguage === 'en' || user?.preferredLanguage === 'es') {
+      setLangState(user.preferredLanguage);
+      try { localStorage.setItem('mepbm-lang', user.preferredLanguage); } catch {}
+    }
+  }, [user?.id]);
+
   const setLang = (l: Lang) => {
     setLangState(l);
-    try {
-      localStorage.setItem('mepbm-lang', l);
-    } catch { /* ignore */ }
+    try { localStorage.setItem('mepbm-lang', l); } catch {}
+    // Persist to DB if logged in
+    if (user) {
+      authApi.updateLanguage(l).catch(() => {});
+      useAuthStore.getState().setAuth(
+        useAuthStore.getState().token!,
+        { ...user, preferredLanguage: l }
+      );
+    }
   };
+
   const t: TFunc = (key, vars) => {
     let s: string = dicts[lang][key] ?? en[key] ?? key;
     if (vars) {
@@ -37,6 +56,7 @@ export function LangProvider({ children }: { children: ReactNode }) {
     }
     return s;
   };
+
   return <LangCtx.Provider value={{ lang, setLang, t }}>{children}</LangCtx.Provider>;
 }
 

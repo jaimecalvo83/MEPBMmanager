@@ -5,7 +5,7 @@ import { authApi } from '../../api/client';
 import { useLang } from '../../i18n/lang';
 
 export default function Register() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,7 +19,7 @@ export default function Register() {
     setError('');
     setLoading(true);
     try {
-      const { data } = await authApi.register(username, email, password);
+      const { data } = await authApi.register(username, email, password, lang);
       setAuth(data.token, data.user);
       navigate('/');
     } catch (err: unknown) {

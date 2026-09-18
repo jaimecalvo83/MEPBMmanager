@@ -45,6 +45,8 @@ builder.Services.AddScoped<TurnProcessor>();
 builder.Services.AddScoped<CombatResolver>();
 builder.Services.AddScoped<TurnReportService>();
 builder.Services.AddSingleton<MEPBMmanager.Api.Services.IEmailSender, MEPBMmanager.Api.Services.SmtpEmailSender>();
+builder.Services.AddSingleton(sp =>
+    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<MEPBMmanager.Api.Services.SmtpSettings>>().Value);
 builder.Services.Configure<MEPBMmanager.Api.Services.SmtpSettings>(
     builder.Configuration.GetSection("Smtp"));
 

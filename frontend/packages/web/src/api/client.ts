@@ -37,9 +37,11 @@ export const orderLang = () => {
 export const authApi = {
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
-  register: (username: string, email: string, password: string) =>
-    api.post('/auth/register', { username, email, password }),
+  register: (username: string, email: string, password: string, preferredLanguage?: string) =>
+    api.post('/auth/register', { username, email, password, preferredLanguage }),
   me: () => api.get('/auth/me'),
+  updateLanguage: (language: string) =>
+    api.patch('/auth/language', { language }),
 };
 
 export const usersApi = {

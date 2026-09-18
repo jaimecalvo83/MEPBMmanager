@@ -44,20 +44,23 @@ public class AuthController : ControllerBase
 
         var defaultRole = await _db.Roles.FirstOrDefaultAsync(r => r.Id == "game_user");
 
+        var lang = string.IsNullOrWhiteSpace(request.PreferredLanguage) ? "en" : request.PreferredLanguage;
+
         var user = new User
         {
             Id = Guid.NewGuid().ToString(),
             Email = request.Email,
             Username = request.Username,
             Password = BCrypt.Net.BCrypt.HashPassword(request.Password),
-            RoleId = defaultRole?.Id ?? "game_user"
+            RoleId = defaultRole?.Id ?? "game_user",
+            PreferredLanguage = lang
         };
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
         var token = GenerateToken(user);
-        return Ok(new { token, user = new { user.Id, user.Email, user.Username, user.RoleId } });
+        return Ok(new { token, user = new { user.Id, user.Email, user.Username, user.RoleId, user.PreferredLanguage } });
     }
 
     [HttpPost("login")]
@@ -68,7 +71,7 @@ public class AuthController : ControllerBase
             return Unauthorized(new { error = "Invalid credentials" });
 
         var token = GenerateToken(user);
-        return Ok(new { token, user = new { user.Id, user.Email, user.Username, user.RoleId, role = user.Role?.Name } });
+        return Ok(new { token, user = new { user.Id, user.Email, user.Username, user.RoleId, user.PreferredLanguage, role = user.Role?.Name } });
     }
 
     [HttpGet("me")]
@@ -80,7 +83,23 @@ public class AuthController : ControllerBase
         if (user == null)
             return NotFound(new { error = "User not found" });
 
-        return Ok(new { user = new { user.Id, user.Email, user.Username, user.RoleId, role = user.Role?.Name } });
+        return Ok(new { user = new { user.Id, user.Email, user.Username, user.RoleId, user.PreferredLanguage, role = user.Role?.Name } });
+    }
+
+    [HttpPatch("language")]
+    [Authorize]
+    public async Task<IActionResult> UpdateLanguage([FromBody] UpdateLanguageRequest request)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        if (user == null)
+            return NotFound(new { error = "User not found" });
+
+        var lang = request.Language?.ToLower() == "es" ? "es" : "en";
+        user.PreferredLanguage = lang;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { user.PreferredLanguage });
     }
 
     private string GenerateToken(User user)
@@ -93,7 +112,8 @@ public class AuthController : ControllerBase
             new Claim(ClaimTypes.NameIdentifier, user.Id),
             new Claim(ClaimTypes.Email, user.Email),
             new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Role, user.RoleId)
+            new Claim(ClaimTypes.Role, user.RoleId),
+            new Claim("preferred_language", user.PreferredLanguage)
         };
 
         var expirationInDays = _config.GetValue<int>("Jwt:ExpirationInDays", 7);
@@ -109,5 +129,6 @@ public class AuthController : ControllerBase
     }
 }
 
-public record RegisterRequest(string Email, string Username, string Password);
+public record RegisterRequest(string Email, string Username, string Password, string? PreferredLanguage);
 public record LoginRequest(string Email, string Password);
+public record UpdateLanguageRequest(string? Language);
