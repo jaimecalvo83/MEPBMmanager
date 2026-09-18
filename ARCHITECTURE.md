@@ -22,11 +22,13 @@
   - `OrderModels.cs` — DTOs, `EstimateCtx`, `PendingUsage`, `CostEstimate`,
     `OrderRequestException` (el servicio falla con status; el controlador
     lo traduce a HTTP).
-- `backend/MEPBMmanager.Api/Services/TurnProcessor.cs` — resolución del
-  turno (god object histórico, ~4600 líneas: **siguiente candidato a
-  partir en parciales por dominio**). `CombatResolver.cs` es puro y
-  testeable. Los mensajes que guarda en `Order.Result` son histórico en
-  inglés a conciencia (no traducir sin cambiar el modelo).
+- `backend/MEPBMmanager.Api/Services/TurnProcessor*.cs` — resolución del
+  turno en 16 `partial` por dominio (núcleo + Economy/Market/Troops/
+  Transfers/Combat/Movement/Forces/Hostages/Ships/Artifacts/Magic/
+  Agents/Places/Diplomacy/Characters; ninguno pasa de ~630 líneas).
+  `CombatResolver.cs` es puro y testeable. Los mensajes que guarda en
+  `Order.Result` son histórico en inglés a conciencia (no traducir sin
+  cambiar el modelo).
 - `backend/MEPBMmanager.Domain/Constants/` — catálogos fuente de verdad
   (hechizos, artefactos + tablas `*Es`, habilidades, órdenes).
 - `frontend/packages/web/src/i18n/` — `dict-en.ts` (manda: `DictKey`
