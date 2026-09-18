@@ -5,6 +5,7 @@ import { useGames, useCreateGame } from '../../hooks/useGames';
 import { useQueryClient } from 'react-query';
 import { gamesApi } from '../../api/client';
 import { useLang, LanguageSwitcher, roleLabel, statusLabel } from '../../i18n/lang';
+import { ALL_NATIONS } from '@MEPBMmanager/shared';
 
 export default function Dashboard() {
   const { t } = useLang();
@@ -22,12 +23,13 @@ export default function Dashboard() {
 
   const isTestAdmin = user?.role === 'test_admin';
 
-  // Max admins = number of alliances - 1 (creator is already admin)
-  // For 2950: 3 alliances (good, evil, neutral) => max 2 admins
-  // For pruebas: same logic
   const getMaxAdmins = () => {
-    // TODO: Get actual alliance count from game type
-    return 2;
+    const moduleCode = newGameType || '2950';
+    const alliances = new Set(
+      ALL_NATIONS.filter(n => n.module.includes(moduleCode as '1650' | '2950'))
+        .map(n => n.allegiance)
+    );
+    return Math.max(1, alliances.size - 1);
   };
 
   const handleAddPlayer = () => {
