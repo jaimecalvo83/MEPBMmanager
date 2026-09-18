@@ -14,10 +14,14 @@ namespace MEPBMmanager.Api.Controllers;
 public class GamesController : ControllerBase
 {
     private readonly MepbmDbContext _db;
+    private readonly IEmailSender _email;
+    private readonly IConfiguration _cfg;
 
-    public GamesController(MepbmDbContext db)
+    public GamesController(MepbmDbContext db, IEmailSender email, IConfiguration cfg)
     {
         _db = db;
+        _email = email;
+        _cfg = cfg;
     }
 
     [HttpGet]
@@ -224,6 +228,65 @@ public class GamesController : ControllerBase
         }
 
         await _db.SaveChangesAsync();
+
+        // Send invitation emails
+        var appUrl = _cfg["AppUrl"] ?? "http://localhost:5173";
+        var creatorName = User.FindFirstValue(ClaimTypes.Name) ?? "Unknown";
+        var gameTypeId = gameType.Code;
+
+        foreach (var invitedUser in invitedUsers.Where(u => u.Id != userId).DistinctBy(u => u.Id))
+        {
+            var isAdmin = adminEmails.Contains(invitedUser.Email);
+            var subject = isAdmin
+                ? $"🎮 MEPBM: You've been invited as Admin to \"{game.Name}\""
+                : $"🎮 MEPBM: You've been invited to join \"{game.Name}\"";
+
+            var html = $"""
+                <html><body style="font-family:system-ui,sans-serif;max-width:480px;margin:auto;padding:2rem;">
+                <h2 style="color:#c9a227;">MEPBM Manager</h2>
+                <p><strong>{creatorName}</strong> has invited you to a new game:</p>
+                <div style="background:#1a1a2e;color:#e0e0e0;padding:1rem;border-radius:8px;border-left:4px solid #c9a227;">
+                    <p style="margin:0;font-size:1.2rem;font-weight:bold;">{game.Name}</p>
+                    <p style="margin:0.5rem 0 0;color:#999;">Module {gameTypeId} · {request.MaxTurns ?? 200} turns</p>
+                </div>
+                {GetRoleNoticeHtml(isAdmin)}
+                <p style="margin-top:1.5rem;">
+                    <a href="{appUrl}/login" style="display:inline-block;background:#c9a227;color:#1a1a2e;padding:0.75rem 1.5rem;text-decoration:none;border-radius:4px;font-weight:bold;">Join Game</a>
+                </p>
+                </body></html>
+                """;
+
+            await _email.SendAsync(invitedUser.Email, subject, html);
+        }
+
+        foreach (var newEmail in playerEmails.Select(e => e.Trim().ToLower()).Distinct())
+        {
+            var userExists = invitedUsers.Any(u => u.Email == newEmail);
+            if (userExists) continue;
+
+            var isAdmin = adminEmails.Contains(newEmail);
+            var subject = isAdmin
+                ? $"🎮 MEPBM: Admin Invitation – Register to join \"{game.Name}\""
+                : $"🎮 MEPBM: You've been invited to join \"{game.Name}\"";
+
+            var html = $"""
+                <html><body style="font-family:system-ui,sans-serif;max-width:480px;margin:auto;padding:2rem;">
+                <h2 style="color:#c9a227;">MEPBM Manager</h2>
+                <p><strong>{creatorName}</strong> has invited you to a new game:</p>
+                <div style="background:#1a1a2e;color:#e0e0e0;padding:1rem;border-radius:8px;border-left:4px solid #c9a227;">
+                    <p style="margin:0;font-size:1.2rem;font-weight:bold;">{game.Name}</p>
+                    <p style="margin:0.5rem 0 0;color:#999;">Module {gameTypeId} · {request.MaxTurns ?? 200} turns</p>
+                </div>
+                <p>You need to <a href="{appUrl}/register" style="color:#c9a227;">create an account</a> to accept this invitation.</p>
+                {GetRoleNoticeHtml(isAdmin)}
+                <p style="margin-top:1.5rem;">
+                    <a href="{appUrl}/register" style="display:inline-block;background:#c9a227;color:#1a1a2e;padding:0.75rem 1.5rem;text-decoration:none;border-radius:4px;font-weight:bold;">Register Now</a>
+                </p>
+                </body></html>
+                """;
+
+            await _email.SendAsync(newEmail, subject, html);
+        }
 
         return StatusCode(201, new { game = new { game.Id, game.Name, gameTypeCode = gameType.Code, game.Status } });
     }
@@ -1878,6 +1941,10 @@ public class GamesController : ControllerBase
         if (month >= 9 && month <= 11) return "autumn";
         return "winter";
     }
+
+    private static string GetRoleNoticeHtml(bool isAdmin) => isAdmin
+        ? """<p style="background:#2d1f3d;color:#e0b0ff;padding:0.75rem;border-radius:4px;margin-top:1rem;">👑 <strong>Admin role:</strong> You will manage turn processing, resolve disputes, and oversee game setup. Please accept your admin role in the game lobby.</p>"""
+        : """<p style="color:#999;margin-top:1rem;">Use the button below to log in and accept your invitation.</p>""";
 }
 
 public record CreateGameRequest(string Name, string? GameTypeCode, int? MaxTurns, int? TurnIntervalDays, List<string>? PlayerEmails, List<string>? AdminEmails);

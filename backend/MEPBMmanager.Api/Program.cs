@@ -44,6 +44,9 @@ builder.Services.AddOpenApi();
 builder.Services.AddScoped<TurnProcessor>();
 builder.Services.AddScoped<CombatResolver>();
 builder.Services.AddScoped<TurnReportService>();
+builder.Services.AddSingleton<MEPBMmanager.Api.Services.IEmailSender, MEPBMmanager.Api.Services.SmtpEmailSender>();
+builder.Services.Configure<MEPBMmanager.Api.Services.SmtpSettings>(
+    builder.Configuration.GetSection("Smtp"));
 
 // CORS for React frontend
 builder.Services.AddCors(options =>
