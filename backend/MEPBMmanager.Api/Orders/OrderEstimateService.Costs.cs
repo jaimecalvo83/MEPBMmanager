@@ -7,6 +7,11 @@ namespace MEPBMmanager.Api.Orders;
 /// <summary>Live cost estimates: one small method per order family.</summary>
 public sealed partial class OrderEstimateService
 {
+    private static readonly Dictionary<string, int> MaterialRank = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "leather", 10 }, { "bronze", 30 }, { "steel", 60 }, { "mithril", 100 }
+    };
+
     public CostEstimate EstimateCosts(int code, EstimateScope scope)
     {
         var result = code switch
@@ -97,12 +102,10 @@ public sealed partial class OrderEstimateService
     {
         var army = scope.SourceArmy();
         if (army == null || scope.OwnPopulationAt(army.LocationHex) == null) return CostEstimate.Empty;
-        var rank = code == 444 ? army.HCArmourRank : army.HCWeaponRank;
-        var headroom = Math.Max(0, 100 - rank);
         var nation = scope.Nation;
         var max = code == 444
-            ? Math.Min(headroom, Math.Min(nation.Gold / 5, Math.Min(nation.Leather / 5, nation.Steel / 2)))
-            : Math.Min(headroom, Math.Min(nation.Gold / 5, Math.Min(nation.Bronze / 3, nation.Steel)));
+            ? Math.Min(nation.Gold / 5, Math.Min(nation.Leather / 5, nation.Steel / 2))
+            : Math.Min(nation.Gold / 5, Math.Min(nation.Bronze / 3, nation.Steel));
         var amount = Math.Min(scope.Number("amount", max), max);
         var costs = new Dictionary<string, int> { ["gold"] = amount * 5 };
         if (code == 444) { costs["leather"] = amount * 5; costs["steel"] = amount * 2; }
@@ -118,11 +121,22 @@ public sealed partial class OrderEstimateService
         var present = TotalTroops(army);
         var asked = TroopCodes.Sum(p => scope.Number(p.Short));
         var amount = Math.Min(asked <= 0 ? present : asked, present);
-        return new CostEstimate(new Dictionary<string, int>
+        var materialUnits = Math.Max(1, (amount + 99) / 100);
+
+        // Check army Train spare equipment, not nation stock
+        var spareCount = code == 370 ? army.SpareWeapons : army.SpareArmour;
+        var spareMaterial = code == 370 ? army.SpareWeaponsMaterial : army.SpareArmourMaterial;
+        var spareRank = MaterialRank.GetValueOrDefault(spareMaterial ?? "", 0);
+        var targetRank = MaterialRank.GetValueOrDefault(material, 0);
+        var maxFromTrain = spareRank >= targetRank ? spareCount / materialUnits : 0;
+        var max = Math.Min(maxFromTrain, present);
+
+        var costs = new Dictionary<string, int>
         {
             ["gold"] = code == 370 ? 500 : 600,
-            [material] = Math.Max(1, (amount + 99) / 100),
-        }, present, null);
+        };
+        if (max > 0) costs[material] = materialUnits;
+        return new CostEstimate(costs, max, null);
     }
 
     private static CostEstimate FortCosts(EstimateScope scope)

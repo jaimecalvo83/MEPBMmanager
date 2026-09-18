@@ -252,7 +252,6 @@ public sealed partial class TurnProcessor
     {
         if (order.Army == null) return MakeResult(order, "No army specified", false);
         var kind = isWeapon ? "Weapons" : "Armour";
-        var goldCost = isWeapon ? 500 : 600;
 
         var material = isWeapon ? "bronze" : "leather";
         if (parameters.TryGetValue("material", out var matEl)) material = matEl.GetString() ?? material;
@@ -271,8 +270,13 @@ public sealed partial class TurnProcessor
 
         var amount = wanted.Sum(t => ParamTroops(parameters, TroopShortKeys.First(kv => kv.Value == t).Key));
         var materialUnits = Math.Max(1, (amount + 99) / 100);
-        if (order.Nation.Gold < goldCost || MaterialStock(order.Nation, material) < materialUnits)
-            return MakeResult(order, $"Insufficient resources: need {goldCost} gold and {materialUnits} {material}", false);
+
+        // Consume from army Train spare equipment, not nation stock
+        var spareCount = isWeapon ? order.Army.SpareWeapons : order.Army.SpareArmour;
+        var spareMaterial = isWeapon ? order.Army.SpareWeaponsMaterial : order.Army.SpareArmourMaterial;
+        var spareRank = MaterialRank.GetValueOrDefault(spareMaterial ?? "", 0);
+        if (spareCount < materialUnits || spareRank < targetRank)
+            return MakeResult(order, $"Insufficient {kind.ToLower()} in Train: need {materialUnits} {material} (have {spareCount} {spareMaterial} rank {spareRank})", false);
 
         var upgraded = new List<string>();
         foreach (var t in wanted)
@@ -286,10 +290,22 @@ public sealed partial class TurnProcessor
         if (upgraded.Count == 0)
             return MakeResult(order, $"{kind} already at {material} rank or better", false);
 
+        // Consume from army Train
+        if (isWeapon)
+        {
+            order.Army.SpareWeapons -= materialUnits;
+            if (order.Army.SpareWeapons <= 0) order.Army.SpareWeaponsMaterial = "none";
+        }
+        else
+        {
+            order.Army.SpareArmour -= materialUnits;
+            if (order.Army.SpareArmour <= 0) order.Army.SpareArmourMaterial = "none";
+        }
+
+        var goldCost = isWeapon ? 500 : 600;
         order.Nation.Gold -= goldCost;
-        ConsumeMaterial(order.Nation, material, materialUnits);
         order.Status = "resolved";
-        order.Result = $"{kind} upgraded to {material} for {string.Join(", ", upgraded)} ({amount} troops, {goldCost} gold, {materialUnits} {material})";
+        order.Result = $"{kind} upgraded to {material} for {string.Join(", ", upgraded)} ({amount} troops, {goldCost} gold, {materialUnits} {material} from Train)";
         return MakeResult(order, order.Result);
     }
 
@@ -384,30 +400,28 @@ public sealed partial class TurnProcessor
 
         var material = "steel";
         if (parameters.TryGetValue("material", out var matEl)) material = matEl.GetString() ?? material;
-        if (!MaterialRank.TryGetValue(material, out var targetRank) || (material != "leather" && material != "bronze" && material != "steel" && material != "mithril"))
+        if (!MaterialRank.TryGetValue(material, out _) || (material != "leather" && material != "bronze" && material != "steel" && material != "mithril"))
             return MakeResult(order, "Armour material must be leather, bronze, steel or mithril", false);
 
-        var army = order.Army;
-        var maxAdd = Math.Min(amount, Math.Max(0, Math.Min(100, targetRank) - army.HCArmourRank));
-        if (maxAdd <= 0) return MakeResult(order, $"Armour already at {material} rank or maximum (100)", false);
-
-        var goldCost = maxAdd * 5;
-        var leatherCost = maxAdd * 5;
-        var steelCost = maxAdd * 2;
+        // Each unit of spare armour costs gold + leather + steel
+        var goldCost = amount * 5;
+        var leatherCost = amount * 5;
+        var steelCost = amount * 2;
         if (order.Nation.Gold < goldCost || order.Nation.Leather < leatherCost || order.Nation.Steel < steelCost)
-            return MakeResult(order, $"Insufficient resources to improve armour (need {goldCost}g, {leatherCost} leather, {steelCost} steel)", false);
+            return MakeResult(order, $"Insufficient resources to forge {amount} {material} armour (need {goldCost}g, {leatherCost} leather, {steelCost} steel)", false);
+
+        // If Train already has spare armour of a different material, only add if same material
+        var army = order.Army;
+        if (army.SpareArmour > 0 && army.SpareArmourMaterial != material && army.SpareArmourMaterial != "none")
+            return MakeResult(order, $"Train already has {army.SpareArmour} {army.SpareArmourMaterial} armour (cannot mix materials)", false);
 
         order.Nation.Gold -= goldCost;
         order.Nation.Leather -= leatherCost;
         order.Nation.Steel -= steelCost;
-        army.HCArmourRank += maxAdd;
-        army.LCArmourRank += maxAdd;
-        army.HIArmourRank += maxAdd;
-        army.LIArmourRank += maxAdd;
-        army.ArcherArmourRank += maxAdd;
-        army.MAAArmourRank += maxAdd;
+        army.SpareArmour += amount;
+        army.SpareArmourMaterial = material;
         order.Status = "resolved";
-        order.Result = $"Improved armour rank by {maxAdd} towards {material} (now {army.HCArmourRank}) at {pc.Name}";
+        order.Result = $"Forged {amount} {material} armour for Train at {pc.Name} (now {army.SpareArmour} {material} in Train)";
         return MakeResult(order, order.Result);
     }
 
@@ -426,30 +440,28 @@ public sealed partial class TurnProcessor
 
         var material = "bronze";
         if (parameters.TryGetValue("material", out var matEl)) material = matEl.GetString() ?? material;
-        if (!MaterialRank.TryGetValue(material, out var targetRank) || (material != "bronze" && material != "steel" && material != "mithril"))
+        if (!MaterialRank.TryGetValue(material, out _) || (material != "bronze" && material != "steel" && material != "mithril"))
             return MakeResult(order, "Weapon material must be bronze, steel or mithril", false);
 
-        var army = order.Army;
-        var maxAdd = Math.Min(amount, Math.Max(0, Math.Min(100, targetRank) - army.HCWeaponRank));
-        if (maxAdd <= 0) return MakeResult(order, $"Weapons already at {material} rank or maximum (100)", false);
-
-        var goldCost = maxAdd * 5;
-        var bronzeCost = maxAdd * 3;
-        var steelCost = maxAdd * 1;
+        // Each unit of spare weapon costs gold + bronze + steel
+        var goldCost = amount * 5;
+        var bronzeCost = amount * 3;
+        var steelCost = amount;
         if (order.Nation.Gold < goldCost || order.Nation.Bronze < bronzeCost || order.Nation.Steel < steelCost)
-            return MakeResult(order, $"Insufficient resources to improve weapons (need {goldCost}g, {bronzeCost} bronze, {steelCost} steel)", false);
+            return MakeResult(order, $"Insufficient resources to forge {amount} {material} weapons (need {goldCost}g, {bronzeCost} bronze, {steelCost} steel)", false);
+
+        var army = order.Army;
+        if (army.SpareWeapons > 0 && army.SpareWeaponsMaterial != material && army.SpareWeaponsMaterial != "none")
+            return MakeResult(order, $"Train already has {army.SpareWeapons} {army.SpareWeaponsMaterial} weapons (cannot mix materials)", false);
 
         order.Nation.Gold -= goldCost;
         order.Nation.Bronze -= bronzeCost;
         order.Nation.Steel -= steelCost;
-        army.HCWeaponRank += maxAdd;
-        army.LCWeaponRank += maxAdd;
-        army.HIWeaponRank += maxAdd;
-        army.LIWeaponRank += maxAdd;
-        army.ArcherWeaponRank += maxAdd;
-        army.MAAWeaponRank += maxAdd;
+        army.SpareWeapons += amount;
+        army.SpareWeaponsMaterial = material;
         order.Status = "resolved";
-        order.Result = $"Improved weapon rank by {maxAdd} towards {material} (now {army.HCWeaponRank}) at {pc.Name}";
+        order.Result = $"Forged {amount} {material} weapons for Train at {pc.Name} (now {army.SpareWeapons} {material} in Train)";
+        return MakeResult(order, order.Result);
         return MakeResult(order, order.Result);
     }
 }
